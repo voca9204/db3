@@ -1,0 +1,89 @@
+{
+  "created": [
+    {
+      "name": "idx_game_scores_userId",
+      "table": "game_scores",
+      "columns": [
+        "userId"
+      ],
+      "priority": "CRITICAL",
+      "reason": "JOIN 쿼리 성능 개선 (9.4초 → <100ms 목표)",
+      "executionTime": 212
+    },
+    {
+      "name": "idx_players_status_userId",
+      "table": "players",
+      "columns": [
+        "status",
+        "userId"
+      ],
+      "priority": "HIGH",
+      "reason": "WHERE 조건 최적화 및 사용자 상태 필터링",
+      "executionTime": 126
+    },
+    {
+      "name": "idx_game_scores_userId_gameDate",
+      "table": "game_scores",
+      "columns": [
+        "userId",
+        "gameDate"
+      ],
+      "priority": "HIGH",
+      "reason": "날짜 범위 쿼리 최적화 (115ms → <50ms 목표)",
+      "executionTime": 261
+    },
+    {
+      "name": "idx_promotion_players_player_appliedAt",
+      "table": "promotion_players",
+      "columns": [
+        "player",
+        "appliedAt"
+      ],
+      "priority": "MEDIUM",
+      "reason": "이벤트 분석 쿼리 최적화",
+      "executionTime": 128
+    },
+    {
+      "name": "idx_money_flows_player_type_createdAt",
+      "table": "money_flows",
+      "columns": [
+        "player",
+        "type",
+        "createdAt"
+      ],
+      "priority": "MEDIUM",
+      "reason": "금융 거래 분석 최적화",
+      "executionTime": 157
+    },
+    {
+      "name": "idx_player_guilds_guild_player",
+      "table": "player_guilds",
+      "columns": [
+        "guild",
+        "player"
+      ],
+      "priority": "MEDIUM",
+      "reason": "다중 계정 분석 최적화",
+      "executionTime": 111
+    }
+  ],
+  "exists": [],
+  "failed": [],
+  "performance": {
+    "JOIN 쿼리 (CRITICAL 수정 대상)": {
+      "executionTime": 87,
+      "targetTime": 100,
+      "status": "GOOD"
+    },
+    "날짜 범위 쿼리": {
+      "executionTime": 88,
+      "targetTime": 50,
+      "status": "NEEDS_WORK"
+    },
+    "이벤트 분석 쿼리": {
+      "executionTime": 95,
+      "targetTime": 30,
+      "status": "NEEDS_WORK"
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "db3-casino-reactivation",
+  "version": "1.0.0",
+  "description": "카지노 사용자 재활성화 시스템 - 휴면 사용자를 타겟으로 한 개인화된 이벤트 시스템",
+  "main": "index.js",
+  "scripts": {
+    "start": "firebase emulators:start",
+    "serve": "firebase emulators:start --only functions,hosting",
+    "deploy": "firebase deploy",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:hosting": "firebase deploy --only hosting",
+    "build": "npm run build --prefix functions",
+    "logs": "firebase functions:log",
+    "test": "npm test --prefix functions"
+  },
+  "keywords": [
+    "casino",
+    "reactivation",
+    "firebase",
+    "mariadb",
+    "analytics",
+    "user-engagement"
+  ],
+  "author": "DB3 Team",
+  "license": "MIT",
+  "dependencies": {
+    "firebase-tools": "^13.8.1"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/voca9204@gmail.com/db3.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

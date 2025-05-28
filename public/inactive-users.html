@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB3 - 가입 후 미활성 사용자 분석</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 20px 20px 0 0 !important;
+            border: none;
+            padding: 1.5rem;
+        }
+        
+        .period-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        
+        .period-1month {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a52);
+            color: white;
+        }
+        
+        .period-1-6months {
+            background: linear-gradient(135deg, #ffa726, #ff9800);
+            color: white;
+        }
+        
+        .period-7-12months {
+            background: linear-gradient(135deg, #42a5f5, #1976d2);
+            color: white;
+        }
+        
+        .rep-id {
+            background: linear-gradient(135deg, #ab47bc, #8e24aa);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            display: inline-block;
+            margin-left: 0.5rem;
+            box-shadow: 0 2px 8px rgba(171, 71, 188, 0.3);
+        }
+        
+        .user-card {
+            background: white;
+            border-radius: 15px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .user-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+        }
+        
+        .user-card.period-1month {
+            border-left-color: #ff6b6b;
+        }
+        
+        .user-card.period-1-6months {
+            border-left-color: #ffa726;
+        }
+        
+        .user-card.period-7-12months {
+            border-left-color: #42a5f5;
+        }
+        
+        .stats-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            border-radius: 20px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 25px rgba(240, 147, 251, 0.3);
+        }
+        
+        .stats-number {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+        
+        .loading-spinner {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+            border-width: 0.3rem;
+        }
+        
+        .marketing-insight {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .performance-badge {
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            color: #333;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            font-weight: 600;
+            display: inline-block;
+        }
+
+        .group-card {
+            background: rgba(171, 71, 188, 0.1);
+            border: 2px solid rgba(171, 71, 188, 0.3);
+            border-radius: 15px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .btn-refresh {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 25px;
+            padding: 0.75rem 2rem;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-refresh:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1 class="mb-0"><i class="fas fa-user-slash me-2"></i>가입 후 미활성 사용자 분석</h1>
+                                <p class="mb-0 mt-2 opacity-75">최근 1년 이내 가입 + 게임 실적 없는 사용자 현황</p>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-success" onclick="downloadCSV()" style="background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); border: none; border-radius: 25px; padding: 0.75rem 2rem; color: white; font-weight: 600;">
+                                    <i class="fas fa-download me-2"></i>CSV 다운로드
+                                </button>
+                                <button class="btn btn-refresh" onclick="refreshData()">
+                                    <i class="fas fa-sync-alt me-2"></i>새로고침
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loadingSpinner" class="loading-spinner">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">로딩 중...</span>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div id="mainContent" style="display: none;">
+            <!-- Summary Stats Row -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <div class="stats-card">
+                        <div class="stats-number" id="totalUsers">0</div>
+                        <div>총 미활성 사용자</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+                        <div class="stats-number" id="monthUsers">0</div>
+                        <div>1달 이내 가입</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+                        <div class="stats-number" id="sixMonthUsers">0</div>
+                        <div>1-6개월 가입</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stats-card" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+                        <div class="stats-number" id="yearUsers">0</div>
+                        <div>7-12개월 가입</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Row -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>가입 기간별 분포</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="periodChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>대표ID 보유 현황</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container">
+                                <canvas id="repIdChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance & Marketing Insights -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="marketing-insight">
+                        <h5><i class="fas fa-lightbulb me-2"></i>마케팅 인사이트</h5>
+                        <div id="marketingInsights"></div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-tachometer-alt me-2"></i>성능 정보</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="performance-badge">
+                                <i class="fas fa-clock me-1"></i>쿼리 실행시간: <span id="queryTime">-</span>ms
+                            </div>
+                            <div class="performance-badge ms-2">
+                                <i class="fas fa-database me-1"></i>결과 수: <span id="resultCount">-</span>개
+                            </div>
+                            <div class="mt-2">
+                                <small class="text-muted">마지막 업데이트: <span id="lastUpdate">-</span></small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Lists by Period -->
+            <div class="row">
+                <!-- 1달 이내 -->
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <span class="period-badge period-1month">🟢 1달 이내</span>
+                                <span class="badge bg-secondary ms-2" id="count1Month">0명</span>
+                            </h5>
+                        </div>
+                        <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                            <div id="users1Month"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 1-6개월 -->
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <span class="period-badge period-1-6months">🟡 1-6개월</span>
+                                <span class="badge bg-secondary ms-2" id="count1To6Months">0명</span>
+                            </h5>
+                        </div>
+                        <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                            <div id="users1To6Months"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 7-12개월 -->
+                <div class="col-md-4 mb-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0">
+                                <span class="period-badge period-7-12months">🔴 7-12개월</span>
+                                <span class="badge bg-secondary ms-2" id="count7To12Months">0명</span>
+                            </h5>
+                        </div>
+                        <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                            <div id="users7To12Months"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Representative ID Groups -->
+            <div class="row" id="repIdGroups" style="display: none;">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-link me-2"></i>대표ID별 그룹 현황</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="groupedUsers"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let periodChart, repIdChart;
+        
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log("✅ 미활성 사용자 분석 페이지 로드 완료");
+            
+            // Firebase 초기화 (인증 표시용)
+            try {
+                await initializeFirebase();
+                await checkAuthStatus();
+                showAuthStatus(true, getCurrentUserEmail());
+                console.log("✅ 인증 완료");
+            } catch (error) {
+                console.log("⚠️ 인증 실패하지만 공개 API 사용:", error.message);
+                showAuthStatus(false);
+            }
+            
+            // 데이터 로드 (인증과 관계없이 실행)
+            loadData();
+        });
+
+        async function loadData() {
+            showLoading();
+            
+            try {
+                // 로컬 개발환경과 프로덕션 환경 구분
+                const isLocal = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+                const apiUrl = isLocal 
+                    ? 'http://127.0.0.1:9003/db888-67827/us-central1/getInactiveNewUsersAnalysis'
+                    : 'https://us-central1-db888-67827.cloudfunctions.net/getInactiveNewUsersAnalysis?v=' + Date.now();
+                
+                console.log('Loading data from:', apiUrl);
+                
+                // 공개 API이므로 인증 헤더 불필요
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.status === 'success') {
+                    displayData(result);
+                } else {
+                    showError('데이터 로드 실패: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('네트워크 오류: ' + error.message);
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('loadingSpinner').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingSpinner').style.display = 'none';
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        function showError(message) {
+            hideLoading();
+            document.getElementById('mainContent').innerHTML = `
+                <div class="alert alert-danger text-center">
+                    <h4>오류 발생</h4>
+                    <p>${message}</p>
+                    <button class="btn btn-primary" onclick="loadData()">다시 시도</button>
+                </div>
+            `;
+            document.getElementById('mainContent').style.display = 'block';
+        }
+
+        function displayData(result) {
+            const { data, analysis, performance, groupedByRepId } = result;
+            
+            // Update summary stats
+            document.getElementById('totalUsers').textContent = analysis.total;
+            document.getElementById('monthUsers').textContent = analysis.byPeriod['1달이내'];
+            document.getElementById('sixMonthUsers').textContent = analysis.byPeriod['1-6개월'];
+            document.getElementById('yearUsers').textContent = analysis.byPeriod['7-12개월'];
+            
+            // Update performance info
+            document.getElementById('queryTime').textContent = performance.queryTime;
+            document.getElementById('resultCount').textContent = performance.resultCount;
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleString('ko-KR');
+            
+            // Update period counts
+            document.getElementById('count1Month').textContent = analysis.byPeriod['1달이내'] + '명';
+            document.getElementById('count1To6Months').textContent = analysis.byPeriod['1-6개월'] + '명';
+            document.getElementById('count7To12Months').textContent = analysis.byPeriod['7-12개월'] + '명';
+            
+            // Display user lists
+            displayUsersByPeriod(data, '1달이내', 'users1Month');
+            displayUsersByPeriod(data, '1-6개월', 'users1To6Months');
+            displayUsersByPeriod(data, '7-12개월', 'users7To12Months');
+            
+            // Display grouped users if there are any
+            if (groupedByRepId && Object.keys(groupedByRepId).length > 0) {
+                displayGroupedUsers(groupedByRepId);
+                document.getElementById('repIdGroups').style.display = 'block';
+            }
+            
+            // Display marketing insights
+            displayMarketingInsights(analysis);
+            
+            // Create charts
+            createPeriodChart(analysis);
+            createRepIdChart(analysis);
+            
+            hideLoading();
+        }
+
+        function displayUsersByPeriod(data, period, containerId) {
+            const users = data.filter(user => user.join_period === period);
+            const container = document.getElementById(containerId);
+            
+            if (users.length === 0) {
+                container.innerHTML = '<p class="text-muted text-center">해당 기간 사용자가 없습니다.</p>';
+                return;
+            }
+            
+            const periodClass = period === '1달이내' ? 'period-1month' : 
+                               period === '1-6개월' ? 'period-1-6months' : 'period-7-12months';
+            
+            container.innerHTML = users.map((user, index) => {
+                const joinDate = new Date(user.join_date).toLocaleDateString('ko-KR');
+                const repId = user.representative_userId ? 
+                    `<div class="small text-info mt-1">
+                        <i class="fas fa-link"></i> 대표ID: ${user.representative_userId.substring(0, 12)}...
+                     </div>` : 
+                    `<div class="small text-muted mt-1">
+                        <i class="fas fa-user"></i> 단독 계정
+                     </div>`;
+                
+                return `
+                    <div class="user-card ${periodClass}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <div class="d-flex align-items-center mb-1">
+                                    <span class="badge bg-secondary me-2">${index + 1}</span>
+                                    <strong class="text-primary">${user.userId}</strong>
+                                </div>
+                                ${repId}
+                            </div>
+                            <div class="text-end">
+                                <div class="fw-bold text-success">${joinDate}</div>
+                                <div class="small text-muted">${user.days_since_join}일 전 가입</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function displayGroupedUsers(groupedByRepId) {
+            const container = document.getElementById('groupedUsers');
+            
+            container.innerHTML = Object.entries(groupedByRepId).map(([repId, users]) => {
+                const userList = users.map((user, index) => {
+                    const joinDate = new Date(user.join_date).toLocaleDateString('ko-KR');
+                    const periodBadgeClass = user.join_period === '1달이내' ? 'bg-danger' : 
+                                           user.join_period === '1-6개월' ? 'bg-warning' : 'bg-info';
+                    
+                    return `
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <div class="d-flex align-items-center">
+                                <span class="me-2">${index + 1}.</span>
+                                <div>
+                                    <div class="fw-bold text-primary">${user.userId}</div>
+                                    <small class="text-muted">가입: ${joinDate} (${user.days_since_join}일 전)</small>
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge ${periodBadgeClass}">${user.join_period}</span>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                // 대표ID와 연결된 모든 사용자 ID를 헤더에 요약 표시
+                const userIdSummary = users.map(u => u.userId).join(', ');
+                const shortSummary = userIdSummary.length > 50 ? 
+                    userIdSummary.substring(0, 47) + '...' : userIdSummary;
+                
+                return `
+                    <div class="group-card">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="mb-0">
+                                    <span class="rep-id">🔗 대표ID: ${repId.substring(0, 12)}...</span>
+                                </h6>
+                                <span class="badge bg-primary fs-6">${users.length}개 계정</span>
+                            </div>
+                            <div class="small text-muted">
+                                <strong>연결된 계정:</strong> ${shortSummary}
+                            </div>
+                        </div>
+                        <div class="user-details">
+                            <h6 class="text-secondary mb-2">📋 상세 정보</h6>
+                            ${userList}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function displayMarketingInsights(analysis) {
+            const container = document.getElementById('marketingInsights');
+            const insights = [];
+            
+            if (analysis.byPeriod['1달이내'] > 0) {
+                insights.push(`🎯 <strong>1달 이내 가입자 (${analysis.byPeriod['1달이내']}명)</strong>: 온보딩 개선 및 즉시 활성화 캠페인 필요`);
+            }
+            
+            if (analysis.byPeriod['1-6개월'] > 0) {
+                insights.push(`🎪 <strong>1-6개월 가입자 (${analysis.byPeriod['1-6개월']}명)</strong>: 재활성화 이벤트 및 맞춤 프로모션 권장`);
+            }
+            
+            if (analysis.byPeriod['7-12개월'] > 0) {
+                insights.push(`💪 <strong>7-12개월 가입자 (${analysis.byPeriod['7-12개월']}명)</strong>: 강력한 복귀 인센티브 또는 계정 정리 검토`);
+            }
+            
+            if (analysis.withRepresentativeId > 0) {
+                insights.push(`🔗 <strong>대표ID 보유자 (${analysis.withRepresentativeId}명)</strong>: 다중 계정 관리 전략 필요`);
+            }
+            
+            container.innerHTML = insights.map(insight => `<div class="mb-2">${insight}</div>`).join('');
+        }
+
+        function createPeriodChart(analysis) {
+            const ctx = document.getElementById('periodChart').getContext('2d');
+            
+            if (periodChart) {
+                periodChart.destroy();
+            }
+            
+            periodChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['1달 이내', '1-6개월', '7-12개월'],
+                    datasets: [{
+                        data: [
+                            analysis.byPeriod['1달이내'],
+                            analysis.byPeriod['1-6개월'],
+                            analysis.byPeriod['7-12개월']
+                        ],
+                        backgroundColor: [
+                            '#ff6b6b',
+                            '#ffa726',
+                            '#42a5f5'
+                        ],
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function createRepIdChart(analysis) {
+            const ctx = document.getElementById('repIdChart').getContext('2d');
+            
+            if (repIdChart) {
+                repIdChart.destroy();
+            }
+            
+            repIdChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['대표ID 보유', '대표ID 미보유'],
+                    datasets: [{
+                        label: '사용자 수',
+                        data: [analysis.withRepresentativeId, analysis.withoutRepresentativeId],
+                        backgroundColor: [
+                            '#ab47bc',
+                            '#78909c'
+                        ],
+                        borderRadius: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                stepSize: 1
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function refreshData() {
+            loadData();
+        }
+
+        async function downloadCSV() {
+            try {
+                // 로컬 개발환경과 프로덕션 환경 구분
+                const isLocal = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+                const apiUrl = isLocal 
+                    ? 'http://127.0.0.1:9003/db888-67827/us-central1/downloadInactiveUsersCSV'
+                    : 'https://us-central1-db888-67827.cloudfunctions.net/downloadInactiveUsersCSV?v=' + Date.now();
+                
+                console.log('Downloading CSV from:', apiUrl);
+                
+                // 다운로드 버튼 상태 변경
+                const downloadBtn = event.target;
+                const originalText = downloadBtn.innerHTML;
+                downloadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>다운로드 중...';
+                downloadBtn.disabled = true;
+                
+                // 공개 API이므로 인증 헤더 불필요
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                // Blob으로 응답 받기
+                const blob = await response.blob();
+                
+                // 파일명 가져오기 (Content-Disposition 헤더에서)
+                const contentDisposition = response.headers.get('Content-Disposition');
+                let fileName = 'inactive_users.csv';
+                if (contentDisposition) {
+                    const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                    if (fileNameMatch) {
+                        fileName = fileNameMatch[1];
+                    }
+                }
+                
+                // 다운로드 링크 생성 및 클릭
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+                // 성공 메시지 표시
+                alert(`CSV 파일이 다운로드되었습니다: ${fileName}`);
+                
+            } catch (error) {
+                console.error('CSV 다운로드 오류:', error);
+                alert('CSV 다운로드 중 오류가 발생했습니다: ' + error.message);
+            } finally {
+                // 버튼 상태 복원
+                const downloadBtn = document.querySelector('button[onclick="downloadCSV()"]');
+                if (downloadBtn) {
+                    downloadBtn.innerHTML = '<i class="fas fa-download me-2"></i>CSV 다운로드';
+                    downloadBtn.disabled = false;
+                }
+            }
+        }
+    </script>
+    
+    <!-- Firebase SDK (compat 방식) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
+    <!-- 인증 시스템 -->
+    <script src="/js/auth.js"></script>
+    
+    <!-- 보안 정책 시스템 -->
+    <script src="/js/security-policy.js"></script>
+    
+    <script>
+        // 페이지 로드 완료 후 보안 정책 초기화
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(() => {
+                initializeSecurityPolicy();
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

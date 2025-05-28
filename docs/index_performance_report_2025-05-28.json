@@ -1,0 +1,157 @@
+{
+  "summary": {
+    "totalIndexes": 6,
+    "activeIndexes": 6,
+    "effectiveIndexes": 5,
+    "totalChecks": 1,
+    "slowQueries": 0,
+    "indexHitRate": 100
+  },
+  "indexDetails": [
+    {
+      "name": "idx_game_scores_userId",
+      "table": "game_scores",
+      "priority": "CRITICAL",
+      "effectiveness": "EXCELLENT",
+      "avgPerformance": 20,
+      "relatedQueriesCount": 1,
+      "usage": {
+        "cardinality": 4015,
+        "columns": [
+          "userId"
+        ],
+        "lastChecked": "2025-05-28T05:17:27.778Z",
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "name": "idx_players_status_userId",
+      "table": "players",
+      "priority": "HIGH",
+      "effectiveness": "EXCELLENT",
+      "avgPerformance": 18,
+      "relatedQueriesCount": 1,
+      "usage": {
+        "cardinality": 6,
+        "columns": [
+          "status",
+          "userId"
+        ],
+        "lastChecked": "2025-05-28T05:17:27.787Z",
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "name": "idx_game_scores_userId_gameDate",
+      "table": "game_scores",
+      "priority": "HIGH",
+      "effectiveness": "EXCELLENT",
+      "avgPerformance": 23,
+      "relatedQueriesCount": 1,
+      "usage": {
+        "cardinality": 3533,
+        "columns": [
+          "userId",
+          "gameDate"
+        ],
+        "lastChecked": "2025-05-28T05:17:27.797Z",
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "name": "idx_promotion_players_player_appliedAt",
+      "table": "promotion_players",
+      "priority": "MEDIUM",
+      "effectiveness": "EXCELLENT",
+      "avgPerformance": 17,
+      "relatedQueriesCount": 1,
+      "usage": {
+        "cardinality": 1097,
+        "columns": [
+          "player",
+          "appliedAt"
+        ],
+        "lastChecked": "2025-05-28T05:17:27.807Z",
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "name": "idx_money_flows_player_type_createdAt",
+      "table": "money_flows",
+      "priority": "MEDIUM",
+      "effectiveness": "EXCELLENT",
+      "avgPerformance": 26,
+      "relatedQueriesCount": 1,
+      "usage": {
+        "cardinality": 1266,
+        "columns": [
+          "player",
+          "type",
+          "createdAt"
+        ],
+        "lastChecked": "2025-05-28T05:17:27.816Z",
+        "status": "ACTIVE"
+      }
+    },
+    {
+      "name": "idx_player_guilds_guild_player",
+      "table": "player_guilds",
+      "priority": "MEDIUM",
+      "effectiveness": "UNKNOWN",
+      "avgPerformance": 0,
+      "relatedQueriesCount": 0,
+      "usage": {
+        "cardinality": 989,
+        "columns": [
+          "guild",
+          "player"
+        ],
+        "lastChecked": "2025-05-28T05:17:27.826Z",
+        "status": "ACTIVE"
+      }
+    }
+  ],
+  "queryPerformance": [
+    {
+      "queryId": "critical_join",
+      "name": "Critical JOIN Query",
+      "latestTime": 20,
+      "targetTime": 100,
+      "status": "EXCELLENT"
+    },
+    {
+      "queryId": "date_range",
+      "name": "Date Range Query",
+      "latestTime": 23,
+      "targetTime": 50,
+      "status": "EXCELLENT"
+    },
+    {
+      "queryId": "event_analysis",
+      "name": "Event Analysis Query",
+      "latestTime": 17,
+      "targetTime": 30,
+      "status": "EXCELLENT"
+    },
+    {
+      "queryId": "user_status_filter",
+      "name": "User Status Filter",
+      "latestTime": 18,
+      "targetTime": 25,
+      "status": "EXCELLENT"
+    },
+    {
+      "queryId": "financial_analysis",
+      "name": "Financial Transaction Analysis",
+      "latestTime": 26,
+      "targetTime": 75,
+      "status": "EXCELLENT"
+    }
+  ],
+  "recommendations": [
+    {
+      "type": "EXCELLENT_PERFORMANCE",
+      "reason": "현재 인덱스 설정이 최적화되어 있습니다."
+    }
+  ]
+}
