@@ -309,9 +309,43 @@
             }
         }
     </style>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 </head>
 <body>
     <div class="container">
+        <!-- 상단 인증 상태 바 -->
+        <div style="position: fixed; top: 20px; right: 20px; z-index: 1000;">
+            <div id="auth-status" style="
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                border-radius: 25px;
+                padding: 10px 20px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                font-size: 0.9rem;
+            ">
+                <span id="auth-text">로그인 상태 확인 중...</span>
+                <button id="auth-btn" style="
+                    background: rgba(255, 255, 255, 0.2);
+                    border: none;
+                    border-radius: 15px;
+                    padding: 5px 15px;
+                    color: white;
+                    cursor: pointer;
+                    font-size: 0.8rem;
+                    transition: all 0.3s ease;
+                " onmouseover="this.style.background='rgba(255, 255, 255, 0.3)'" 
+                   onmouseout="this.style.background='rgba(255, 255, 255, 0.2)'">
+                    대기 중
+                </button>
+            </div>
+        </div>
+        
         <header class="header">
             <h1>🚀 DB3 프로젝트</h1>
             <p class="subtitle">Hermes 데이터베이스 분석 시스템</p>
@@ -319,6 +353,37 @@
                 카지노 사용자 분석을 위한 완전한 데이터베이스 쿼리 및 분석 시스템입니다. 
                 실시간 성능 모니터링, 고급 사용자 세분화, 마케팅 분석 도구를 제공합니다.
             </p>
+            
+            <!-- 로그인 안내 섹션 -->
+            <div style="
+                background: rgba(255, 255, 255, 0.1);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                padding: 20px;
+                margin: 20px 0;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                text-align: center;
+            ">
+                <h3 style="margin-bottom: 15px;">🔐 시스템 접근</h3>
+                <p style="margin-bottom: 20px; opacity: 0.9;">
+                    질의센터 및 분석 도구를 사용하려면 Google 로그인이 필요합니다.
+                </p>
+                <button onclick="window.location.href='/login.html'" style="
+                    background: linear-gradient(135deg, #4285f4, #34a853);
+                    color: white;
+                    border: none;
+                    border-radius: 25px;
+                    padding: 15px 30px;
+                    font-size: 1.1rem;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 4px 15px rgba(66, 133, 244, 0.3);
+                " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(66, 133, 244, 0.4)'"
+                   onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(66, 133, 244, 0.3)'">
+                    🔑 Google로 로그인하기
+                </button>
+            </div>
         </header>
 
         <div class="stats">
@@ -375,6 +440,44 @@
                 
                 <div class="page-actions">
                     <a href="main-dashboard.html" class="btn btn-primary">🚀 대시보드 열기</a>
+                </div>
+            </div>
+
+            <!-- 질의 센터 (새로운 분석 시스템) -->
+            <div class="page-card analysis">
+                <div class="page-header">
+                    <div class="page-icon">🎯</div>
+                    <div>
+                        <div class="page-title">질의 센터</div>
+                        <div class="page-subtitle">통합 데이터 분석 허브</div>
+                        <span class="status-badge status-new">NEW</span>
+                    </div>
+                </div>
+                
+                <div class="page-description">
+                    모든 데이터 분석을 한 곳에서! 질의를 선택하고 실행하여 비즈니스 인사이트를 얻을 수 있는 통합 분석 플랫폼입니다.
+                </div>
+                
+                <div class="features">
+                    <h4>🎯 주요 기능</h4>
+                    <ul>
+                        <li>고활동 휴면 사용자 분석 (완료)</li>
+                        <li>게임 패턴 분석 (준비 중)</li>
+                        <li>수익성 분석 (준비 중)</li>
+                        <li>자동 CSV 다운로드</li>
+                        <li>확장 가능한 질의 시스템</li>
+                    </ul>
+                </div>
+                
+                <div class="query-conditions">
+                    <h4>📊 분석 카테고리</h4>
+                    <div class="condition">사용자 행동 분석: 활동 패턴 및 휴면 분석</div>
+                    <div class="condition">게임 패턴 분석: 플레이 성향 및 선호도</div>
+                    <div class="condition">수익성 분석: LTV 및 수익 기여도</div>
+                </div>
+                
+                <div class="page-actions">
+                    <a href="query-center.html" class="btn btn-primary">🎯 질의 센터 열기</a>
                 </div>
             </div>
 
@@ -684,6 +787,122 @@
         
         // 보안 정책 초기화
         initializeSecurityPolicy();
+        
+        // Firebase 인증 초기화 (지연 실행)
+        setTimeout(() => {
+            initializeAuthentication();
+        }, 1000);
+    </script>
+    
+    <!-- Firebase 인증 처리 -->
+    <script>
+        // Firebase 설정
+        const firebaseConfig = {
+            apiKey: "AIzaSyD2RY02pN2RrhT8Qt2hTSEilRqV4JAbCR0",
+            authDomain: "db888-67827.firebaseapp.com",
+            projectId: "db888-67827",
+            storageBucket: "db888-67827.firebasestorage.app",
+            messagingSenderId: "888497598316",
+            appId: "1:888497598316:web:b2cb26b0a825e11a658d49"
+        };
+
+        // Firebase 초기화 (중복 방지)
+        console.log('🔥 Firebase 초기화 시도...');
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+            console.log('✅ Firebase 초기화 완료');
+        } else {
+            console.log('✅ Firebase 이미 초기화됨');
+        }
+
+        // 인증 상태 관리 (개선된 버전)
+        function initializeAuthentication() {
+            const authText = document.getElementById('auth-text');
+            const authBtn = document.getElementById('auth-btn');
+            
+            console.log('🔒 Firebase 인증 초기화 시작...');
+            
+            // 초기 상태 설정
+            authText.textContent = '로그인 상태 확인 중...';
+            authBtn.textContent = '대기 중';
+            authBtn.disabled = true;
+            
+            // Firebase가 완전히 로드될 때까지 대기
+            const waitForFirebase = () => {
+                if (typeof firebase !== 'undefined' && firebase.auth) {
+                    console.log('✅ Firebase 로드 완료');
+                    setupAuthListener();
+                } else {
+                    console.log('⏳ Firebase 로딩 중...');
+                    setTimeout(waitForFirebase, 500);
+                }
+            };
+            
+            // 인증 상태 리스너 설정
+            const setupAuthListener = () => {
+                try {
+                    // 즉시 현재 상태 확인
+                    const currentUser = firebase.auth().currentUser;
+                    if (currentUser) {
+                        console.log('🔍 현재 사용자:', currentUser.email);
+                        updateAuthUI(currentUser);
+                    } else {
+                        console.log('🔍 현재 사용자: 없음');
+                        updateAuthUI(null);
+                    }
+                    
+                    // 상태 변화 리스너 등록
+                    firebase.auth().onAuthStateChanged((user) => {
+                        console.log('🔄 Auth 상태 변화:', user ? user.email : 'null');
+                        updateAuthUI(user);
+                    });
+                    
+                } catch (error) {
+                    console.error('❌ Firebase Auth 초기화 실패:', error);
+                    authText.textContent = '인증 시스템 오류';
+                    authBtn.textContent = '새로고침';
+                    authBtn.disabled = false;
+                    authBtn.onclick = () => window.location.reload();
+                }
+            };
+            
+            // UI 업데이트 함수
+            const updateAuthUI = (user) => {
+                if (user && user.email === 'sandscasino8888@gmail.com') {
+                    // 로그인됨
+                    authText.textContent = user.displayName || user.email;
+                    authBtn.textContent = '로그아웃';
+                    authBtn.disabled = false;
+                    authBtn.onclick = logout;
+                    console.log('✅ 인증된 사용자 UI 업데이트 완료');
+                } else {
+                    // 로그아웃됨
+                    authText.textContent = '로그인 필요';
+                    authBtn.textContent = '로그인';
+                    authBtn.disabled = false;
+                    authBtn.onclick = goToLogin;
+                    console.log('🔓 미인증 사용자 UI 업데이트 완료');
+                }
+            };
+            
+            // Firebase 로딩 시작
+            waitForFirebase();
+        }
+        
+        // 로그인 페이지로 이동
+        function goToLogin() {
+            window.location.href = '/login.html';
+        }
+        
+        // 로그아웃
+        async function logout() {
+            try {
+                await firebase.auth().signOut();
+                console.log('✅ 로그아웃 완료');
+            } catch (error) {
+                console.error('❌ 로그아웃 실패:', error);
+            }
+        }
     </script>
     
     <!-- 보안 정책 시스템 -->

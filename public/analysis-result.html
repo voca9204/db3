@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DB3 분석 결과</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
+    <!-- 인증 시스템 -->
+    <script src="/js/auth.js"></script>
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .navbar {
+            background: rgba(255, 255, 255, 0.1) !important;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .main-container {
+            margin-top: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .analysis-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .analysis-title {
+            display: flex;
+            align-items: center;
+            color: #333;
+        }
+
+        .analysis-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            color: white;
+            margin-right: 1rem;
+        }
+
+        .title-text h2 {
+            margin: 0;
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .title-text p {
+            margin: 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-csv {
+            background: linear-gradient(135deg, #20bf6b, #26d0ce);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-csv:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(32, 191, 107, 0.4);
+            color: white;
+        }
+
+        .btn-back {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn-back:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            color: white;
+        }
+
+        .btn-retry {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+        }
+
+        .btn-retry:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(243, 156, 18, 0.4);
+            color: white;
+        }
+
+        .summary-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .group-section {
+            margin-bottom: 2rem;
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+            padding: 1rem;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+
+        .group-title {
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+
+        .group-count {
+            background: #007bff;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
+        .users-table {
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .table {
+            margin: 0;
+        }
+
+        .table th {
+            background: #f8f9fa;
+            border: none;
+            font-weight: 600;
+            color: #555;
+            padding: 1rem 0.75rem;
+        }
+
+        .table td {
+            border: none;
+            padding: 0.75rem;
+            vertical-align: middle;
+        }
+
+        .table tbody tr {
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .table tbody tr:hover {
+            background-color: #f8f9fa;
+        }
+
+        .loading-container {
+            text-align: center;
+            padding: 3rem;
+            color: white;
+        }
+
+        .loading-spinner {
+            width: 3rem;
+            height: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .error-container {
+            text-align: center;
+            padding: 3rem;
+            color: white;
+        }
+
+        .error-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            color: #ff6b6b;
+        }
+
+        .analysis-criteria {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: 0 10px 10px 0;
+        }
+
+        .criteria-title {
+            font-weight: 600;
+            color: #1976d2;
+            margin-bottom: 0.5rem;
+        }
+
+        .criteria-item {
+            color: #424242;
+            margin-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- 네비게이션 -->
+    <nav class="navbar navbar-expand-lg navbar-dark">
+        <div class="container">
+            <a class="navbar-brand fw-bold" href="/index.html">
+                <i class="fas fa-database me-2"></i>DB3 분석 결과
+            </a>
+            <div class="navbar-nav ms-auto">
+                <div id="auth-info" class="me-3"></div>
+                <button id="login-btn" class="btn btn-outline-light btn-sm me-2" style="display: none;">
+                    <i class="fas fa-sign-in-alt me-1"></i>로그인
+                </button>
+                <button id="logout-btn" class="btn btn-outline-light btn-sm" style="display: none;">
+                    <i class="fas fa-sign-out-alt me-1"></i>로그아웃
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- 메인 컨테이너 -->
+    <div class="container main-container">
+        <!-- 로딩 화면 -->
+        <div id="loading-screen" class="loading-container">
+            <div class="spinner-border loading-spinner text-light" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <h3>분석 실행 중...</h3>
+            <p>데이터를 분석하고 있습니다. 잠시만 기다려주세요.</p>
+        </div>
+
+        <!-- 에러 화면 -->
+        <div id="error-screen" class="error-container" style="display: none;">
+            <div class="error-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3>분석 실행 실패</h3>
+            <p id="error-message">분석 중 오류가 발생했습니다.</p>
+            <button class="btn btn-back mt-3" onclick="goBack()">
+                <i class="fas fa-arrow-left me-2"></i>돌아가기
+            </button>
+        </div>
+
+        <!-- 결과 화면 -->
+        <div id="result-screen" style="display: none;">
+            <!-- 분석 헤더 -->
+            <div class="result-card">
+                <div class="analysis-header">
+                    <div class="analysis-title">
+                        <div id="analysis-icon" class="analysis-icon">
+                            <i class="fas fa-user-clock"></i>
+                        </div>
+                        <div class="title-text">
+                            <h2 id="analysis-title">분석 제목</h2>
+                            <p id="analysis-subtitle">분석 설명</p>
+                        </div>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-csv" onclick="downloadCSV()">
+                            <i class="fas fa-download me-2"></i>CSV 다운로드
+                        </button>
+                        <button class="btn btn-back" onclick="goBack()">
+                            <i class="fas fa-arrow-left me-2"></i>질의 센터
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 분석 기준 -->
+                <div id="analysis-criteria" class="analysis-criteria">
+                    <div class="criteria-title">분석 기준</div>
+                    <div id="criteria-content"></div>
+                </div>
+
+                <!-- 요약 통계 -->
+                <div id="summary-stats" class="summary-stats">
+                    <!-- 동적으로 생성됨 -->
+                </div>
+            </div>
+
+            <!-- 분석 결과 -->
+            <div id="analysis-results">
+                <!-- 동적으로 생성됨 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // 전역 변수
+        let analysisData = null;
+        let analysisType = null;
+        let isAuthenticated = false;
+
+        // 페이지 로드 시 실행
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🎯 분석 결과 페이지 로드 시작');
+            
+            // URL 파라미터에서 분석 타입 추출
+            const urlParams = new URLSearchParams(window.location.search);
+            analysisType = urlParams.get('type');
+
+            if (!analysisType) {
+                showError('분석 타입이 지정되지 않았습니다.');
+                return;
+            }
+
+            // 인증 확인 후 분석 실행
+            initializeAuthentication();
+        });
+
+        // 인증 초기화 및 분석 실행 (개선된 단순 버전)
+        async function initializeAuthentication() {
+            try {
+                console.log('🔒 인증 초기화 시작...');
+                
+                // Firebase가 로드될 때까지 잠시 대기
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
+                // 현재 로그인 상태 확인
+                const currentUser = firebase.auth().currentUser;
+                
+                if (currentUser && currentUser.email === 'sandscasino8888@gmail.com') {
+                    console.log('✅ 이미 로그인된 사용자:', currentUser.email);
+                    console.log('🚀 분석 실행 시작');
+                    await executeAnalysis(analysisType);
+                } else {
+                    console.log('❌ 로그인 필요 - 로그인 페이지로 이동');
+                    window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.href);
+                }
+                
+            } catch (error) {
+                console.error('❌ 인증 초기화 오류:', error);
+                showError('인증 초기화 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        // Auth 시스템 로드 대기
+        function waitForAuthSystem() {
+            return new Promise((resolve, reject) => {
+                let attempts = 0;
+                const maxAttempts = 50; // 5초 대기
+                
+                const checkAuth = () => {
+                    attempts++;
+                    
+                    if (typeof protectPage === 'function' && typeof getAuthToken === 'function') {
+                        console.log('✅ Auth 시스템 로드 완료');
+                        resolve();
+                    } else if (attempts >= maxAttempts) {
+                        reject(new Error('Auth 시스템 로드 타임아웃'));
+                    } else {
+                        setTimeout(checkAuth, 100);
+                    }
+                };
+                
+                checkAuth();
+            });
+        }
+
+        // 인증 완료 대기 (Firebase Auth 상태 직접 감지)
+        function waitForAuthentication() {
+            return new Promise((resolve, reject) => {
+                console.log('🔒 Firebase Auth 상태 감지 시작...');
+                
+                let timeoutHandle = null;
+                let authStateListener = null;
+                
+                // 즉시 현재 상태 확인
+                const currentUser = firebase.auth().currentUser;
+                if (currentUser && currentUser.email === 'sandscasino8888@gmail.com') {
+                    console.log('✅ 이미 로그인된 사용자 확인:', currentUser.email);
+                    resolve();
+                    return;
+                }
+                
+                // 5초 타임아웃으로 더 빠르게 리다이렉트
+                timeoutHandle = setTimeout(() => {
+                    if (authStateListener) {
+                        authStateListener(); // unsubscribe
+                    }
+                    console.log('⏰ 인증 타임아웃: 로그인 페이지로 이동');
+                    // 로그인 페이지로 리다이렉트
+                    window.location.href = '/login.html?redirect=' + encodeURIComponent(window.location.href);
+                    reject(new Error('인증 타임아웃: 로그인을 확인해주세요'));
+                }, 5000);
+                
+                // Firebase Auth 상태 변화 직접 감지
+                const checkFirebaseAuth = () => {
+                    if (typeof firebase !== 'undefined' && firebase.auth) {
+                        console.log('🔒 Firebase Auth 객체 확인 완료');
+                        
+                        // Auth 상태 변화 리스너 등록
+                        authStateListener = firebase.auth().onAuthStateChanged((user) => {
+                            console.log('🔒 Auth 상태 변화 감지:', user ? user.email : 'null');
+                            
+                            if (user && user.email === 'sandscasino8888@gmail.com') {
+                                console.log('✅ 올바른 사용자 인증 확인:', user.email);
+                                
+                                // 토큰 확인
+                                user.getIdToken().then((token) => {
+                                    if (token) {
+                                        console.log('✅ 인증 토큰 확인 완료');
+                                        isAuthenticated = true;
+                                        
+                                        // 정리
+                                        if (timeoutHandle) clearTimeout(timeoutHandle);
+                                        if (authStateListener) authStateListener();
+                                        
+                                        resolve();
+                                    } else {
+                                        console.log('❌ 토큰 확인 실패');
+                                    }
+                                }).catch((error) => {
+                                    console.error('❌ 토큰 획득 오류:', error);
+                                });
+                            } else if (user) {
+                                console.log('❌ 허용되지 않은 사용자:', user.email);
+                                
+                                // 정리
+                                if (timeoutHandle) clearTimeout(timeoutHandle);
+                                if (authStateListener) authStateListener();
+                                
+                                reject(new Error('접근 권한이 없습니다. 올바른 계정으로 로그인해주세요.'));
+                            }
+                        });
+                    } else {
+                        console.log('⏳ Firebase Auth 객체 대기 중...');
+                        setTimeout(checkFirebaseAuth, 200);
+                    }
+                };
+                
+                checkFirebaseAuth();
+            });
+        }
+
+        // 분석 실행 함수
+        async function executeAnalysis(type) {
+            console.log('🎯 분석 실행:', type);
+
+            try {
+                switch (type) {
+                    case 'high-activity-dormant':
+                        await executeHighActivityDormantAnalysis();
+                        break;
+                    default:
+                        throw new Error(`지원하지 않는 분석 타입: ${type}`);
+                }
+            } catch (error) {
+                console.error('❌ 분석 실행 오류:', error);
+                showError(error.message);
+            }
+        }
+
+        // 고활동 휴면 사용자 분석 실행
+        async function executeHighActivityDormantAnalysis() {
+            try {
+                const data = await apiCall('getHighActivityDormantUsers', true);
+                analysisData = data;
+
+                // 결과 화면 구성
+                setupHighActivityDormantResults(data);
+                showResults();
+
+            } catch (error) {
+                throw new Error(`고활동 휴면 사용자 분석 실패: ${error.message}`);
+            }
+        }
+
+        // 고활동 휴면 사용자 결과 화면 구성
+        function setupHighActivityDormantResults(data) {
+            // 분석 정보 설정
+            document.getElementById('analysis-title').textContent = '고활동 휴면 사용자 분석';
+            document.getElementById('analysis-subtitle').textContent = 
+                `분석 완료: ${new Date().toLocaleString('ko-KR')} | 쿼리 시간: ${data.queryTime}`;
+
+            // 분석 기준 설정
+            const criteriaContent = document.getElementById('criteria-content');
+            criteriaContent.innerHTML = `
+                <div class="criteria-item">• ${data.criteria.activeMonthsRequired}</div>
+                <div class="criteria-item">• ${data.criteria.dormantPeriod}</div>
+            `;
+
+            // 요약 통계 설정
+            const summaryStats = document.getElementById('summary-stats');
+            summaryStats.innerHTML = `
+                <div class="stat-box">
+                    <div class="stat-value">${data.summary.totalUsers.toLocaleString()}</div>
+                    <div class="stat-label">총 대상 사용자</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${data.summary.avgActiveMonths}</div>
+                    <div class="stat-label">평균 활동 개월수</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${data.summary.avgDaysSinceLastGame}</div>
+                    <div class="stat-label">평균 휴면 일수</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">${(data.summary.totalNetBet || 0).toLocaleString()}원</div>
+                    <div class="stat-label">총 유효 베팅액</div>
+                </div>
+            `;
+
+            // 그룹별 결과 설정
+            const resultsContainer = document.getElementById('analysis-results');
+            resultsContainer.innerHTML = '';
+
+            const groups = [
+                { key: 'premium', name: 'Premium 등급', color: '#ff6b6b', icon: 'crown' },
+                { key: 'high', name: 'High 등급', color: '#4ecdc4', icon: 'star' },
+                { key: 'medium', name: 'Medium 등급', color: '#45b7b8', icon: 'heart' },
+                { key: 'basic', name: 'Basic 등급', color: '#96ceb4', icon: 'user' }
+            ];
+
+            groups.forEach(group => {
+                const groupData = data.groupedResults[group.key];
+                if (groupData && groupData.count > 0) {
+                    createGroupSection(group, groupData, resultsContainer);
+                }
+            });
+        }
+
+        // 그룹 섹션 생성
+        function createGroupSection(group, groupData, container) {
+            const section = document.createElement('div');
+            section.className = 'result-card group-section';
+            
+            section.innerHTML = `
+                <div class="group-header">
+                    <h4 class="group-title">
+                        <i class="fas fa-${group.icon} me-2" style="color: ${group.color};"></i>
+                        ${group.name}
+                    </h4>
+                    <span class="group-count">${groupData.count}명</span>
+                </div>
+                <div class="mb-3">
+                    <small class="text-muted">${groupData.criteria}</small>
+                </div>
+                <div class="users-table">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>사용자 ID</th>
+                                <th>활동 개월수</th>
+                                <th>휴면 일수</th>
+                                <th>총 게임일수</th>
+                                <th>총 유효배팅</th>
+                                <th>총 손익</th>
+                                <th>마지막 게임</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${groupData.users.map(user => `
+                                <tr>
+                                    <td><code>${user.userId}</code></td>
+                                    <td><span class="badge bg-primary">${user.active_months_count}개월</span></td>
+                                    <td><span class="badge bg-warning">${user.days_since_last_game}일</span></td>
+                                    <td>${user.total_game_days}일</td>
+                                    <td><strong>${(user.total_net_bet || 0).toLocaleString()}원</strong></td>
+                                    <td class="${(user.total_win_loss || 0) >= 0 ? 'text-success' : 'text-danger'}">
+                                        ${(user.total_win_loss || 0).toLocaleString()}원
+                                    </td>
+                                    <td>${new Date(user.last_game_date).toLocaleDateString('ko-KR')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            container.appendChild(section);
+        }
+
+        // API 호출 함수 (Firebase Auth 직접 접근)
+        async function apiCall(endpoint, requireAuth = true, retries = 3) {
+            const url = `https://us-central1-db888-67827.cloudfunctions.net/${endpoint}`;
+            let lastError = null;
+            
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    console.log(`🔄 API 호출 시도 ${attempt}/${retries}: ${endpoint}`);
+                    
+                    const headers = {
+                        'Content-Type': 'application/json'
+                    };
+                    
+                    if (requireAuth) {
+                        // 인증 상태 재확인
+                        if (!isAuthenticated) {
+                            throw new Error('인증되지 않은 상태입니다');
+                        }
+                        
+                        // Firebase Auth에서 직접 토큰 획득
+                        const currentUser = firebase.auth().currentUser;
+                        if (!currentUser) {
+                            throw new Error('현재 사용자를 찾을 수 없습니다');
+                        }
+                        
+                        const token = await currentUser.getIdToken();
+                        if (!token) {
+                            throw new Error('인증 토큰을 가져올 수 없습니다');
+                        }
+                        
+                        headers['Authorization'] = `Bearer ${token}`;
+                        console.log('✅ Firebase Auth 토큰 설정 완료');
+                    }
+                    
+                    const response = await fetch(url, { headers });
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+                    }
+                    
+                    const result = await response.json();
+                    console.log(`✅ API 호출 성공: ${endpoint}`);
+                    return result;
+                    
+                } catch (error) {
+                    lastError = error;
+                    console.error(`❌ API 호출 실패 (시도 ${attempt}/${retries}):`, error.message);
+                    
+                    // 인증 에러인 경우 토큰 재획득 시도
+                    if (error.message.includes('토큰') && attempt < retries) {
+                        console.log('🔄 토큰 재획득 대기 중...');
+                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                        continue;
+                    }
+                    
+                    // 마지막 시도가 아니면 잠시 대기 후 재시도
+                    if (attempt < retries) {
+                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                    }
+                }
+            }
+            
+            throw lastError;
+        }
+
+        // CSV 다운로드 함수
+        function downloadCSV() {
+            if (!analysisData) {
+                alert('다운로드할 데이터가 없습니다.');
+                return;
+            }
+
+            try {
+                // 모든 사용자 데이터 수집
+                const allUsers = [];
+                Object.keys(analysisData.groupedResults).forEach(groupKey => {
+                    const group = analysisData.groupedResults[groupKey];
+                    if (group.users) {
+                        group.users.forEach(user => {
+                            allUsers.push({
+                                ...user,
+                                group: groupKey.toUpperCase()
+                            });
+                        });
+                    }
+                });
+
+                // CSV 헤더
+                const headers = [
+                    '그룹', '사용자ID', '활동개월수', '휴면일수', '총게임일수', 
+                    '총유효배팅', '총손익', '평균일일배팅', '첫게임일', '마지막게임일', '게임기간일수'
+                ];
+
+                // CSV 데이터 생성
+                const csvContent = [
+                    headers.join(','),
+                    ...allUsers.map(user => [
+                        user.group,
+                        user.userId,
+                        user.active_months_count,
+                        user.days_since_last_game,
+                        user.total_game_days,
+                        user.total_net_bet || 0,
+                        user.total_win_loss || 0,
+                        user.avg_daily_bet || 0,
+                        user.first_game_date,
+                        user.last_game_date,
+                        user.game_period_days || 0
+                    ].join(','))
+                ].join('\n');
+
+                // 파일 다운로드
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `고활동_휴면사용자_분석_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+
+                console.log('✅ CSV 다운로드 완료:', allUsers.length, '명');
+
+            } catch (error) {
+                console.error('❌ CSV 다운로드 오류:', error);
+                alert('CSV 다운로드 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        // 화면 전환 함수들
+        function showResults() {
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('error-screen').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'block';
+        }
+
+        function showError(message) {
+            document.getElementById('error-message').textContent = message;
+            document.getElementById('loading-screen').style.display = 'none';
+            document.getElementById('result-screen').style.display = 'none';
+            document.getElementById('error-screen').style.display = 'block';
+            
+            // 재시도 버튼 추가 (인증 에러인 경우)
+            const errorScreen = document.getElementById('error-screen');
+            if (message.includes('인증') || message.includes('토큰')) {
+                const existingRetryBtn = errorScreen.querySelector('.btn-retry');
+                if (!existingRetryBtn) {
+                    const retryBtn = document.createElement('button');
+                    retryBtn.className = 'btn btn-warning mt-2 btn-retry';
+                    retryBtn.innerHTML = '<i class="fas fa-redo me-2"></i>다시 시도';
+                    retryBtn.onclick = retryAnalysis;
+                    
+                    const backBtn = errorScreen.querySelector('.btn-back');
+                    backBtn.parentNode.insertBefore(retryBtn, backBtn);
+                }
+            }
+        }
+
+        // 분석 재시도
+        async function retryAnalysis() {
+            console.log('🔄 분석 재시도 시작');
+            
+            // 에러 화면 숨기고 로딩 화면 표시
+            document.getElementById('error-screen').style.display = 'none';
+            document.getElementById('loading-screen').style.display = 'block';
+            
+            // 인증 상태 재설정
+            isAuthenticated = false;
+            
+            try {
+                // 인증 재초기화
+                await initializeAuthentication();
+            } catch (error) {
+                console.error('❌ 재시도 실패:', error);
+                showError('재시도 중 오류가 발생했습니다: ' + error.message);
+            }
+        }
+
+        function goBack() {
+            window.location.href = '/query-center.html';
+        }
+
+        // 페이지 로드 완료
+        window.addEventListener('load', function() {
+            console.log('🎯 DB3 분석 결과 페이지 로드 완료');
+        });
+    </script>
+</body>
+</html>

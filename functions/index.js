@@ -2885,3 +2885,126 @@ exports.testInvalidAuth = functions.https.onRequest((req, res) => {
     }
   });
 });
+
+
+/**
+ * Get High-Activity Dormant Users
+ * 월평균 게임일자가 10일이 넘는 달이 3개월 이상이면서, 최근 30일간 게임기록이 없는 사용자
+ */
+exports.getHighActivityDormantUsers = functions.https.onRequest(async (req, res) => {
+  await authenticateUser(req, res, async () => {
+    try {
+      const startTime = Date.now();
+
+      // Complex query to find high-activity dormant users
+      const queryText = `
+        WITH monthly_game_days AS (
+          SELECT 
+            userId,
+            DATE_FORMAT(gameDate, '%Y-%m') as game_month,
+            COUNT(DISTINCT gameDate) as monthly_days
+          FROM game_scores 
+          GROUP BY userId, DATE_FORMAT(gameDate, '%Y-%m')
+        ),
+        active_months AS (
+          SELECT 
+            userId,
+            COUNT(*) as months_with_10plus_days
+          FROM monthly_game_days 
+          WHERE monthly_days >= 10
+          GROUP BY userId
+          HAVING COUNT(*) >= 3
+        ),
+        recent_activity AS (
+          SELECT DISTINCT userId
+          FROM game_scores 
+          WHERE gameDate >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+        )
+        SELECT 
+          p.userId,
+          am.months_with_10plus_days as active_months_count,
+          MAX(gs.gameDate) as last_game_date,
+          DATEDIFF(CURDATE(), MAX(gs.gameDate)) as days_since_last_game,
+          COUNT(DISTINCT gs.gameDate) as total_game_days,
+          ROUND(SUM(gs.netBet)) as total_net_bet,
+          ROUND(SUM(gs.winLoss)) as total_win_loss,
+          ROUND(AVG(gs.netBet)) as avg_daily_bet,
+          MIN(gs.gameDate) as first_game_date,
+          DATEDIFF(MAX(gs.gameDate), MIN(gs.gameDate)) as game_period_days
+        FROM active_months am
+        JOIN players p ON p.userId = am.userId 
+        JOIN game_scores gs ON gs.userId = p.userId
+        LEFT JOIN recent_activity ra ON ra.userId = p.userId
+        WHERE ra.userId IS NULL  -- 최근 30일간 게임기록이 없는 사용자
+        GROUP BY p.userId, am.months_with_10plus_days
+        ORDER BY am.months_with_10plus_days DESC, total_net_bet DESC
+        LIMIT 100;
+      `;
+
+      const users = await executeQuery(queryText);
+      const queryTime = Date.now() - startTime;
+
+      // Summary statistics
+      const summary = {
+        totalUsers: users.length,
+        avgActiveMonths: users.length > 0 ? Math.round(users.reduce((sum, u) => sum + u.active_months_count, 0) / users.length * 10) / 10 : 0,
+        avgDaysSinceLastGame: users.length > 0 ? Math.round(users.reduce((sum, u) => sum + u.days_since_last_game, 0) / users.length) : 0,
+        totalNetBet: users.reduce((sum, u) => sum + (u.total_net_bet || 0), 0),
+        totalWinLoss: users.reduce((sum, u) => sum + (u.total_win_loss || 0), 0)
+      };
+
+      // Group by activity level
+      const groupedUsers = {
+        premium: users.filter(u => u.active_months_count >= 6 && u.total_net_bet >= 1000000), // 6개월+ & 100만+ 배팅
+        high: users.filter(u => u.active_months_count >= 4 && u.total_net_bet >= 500000), // 4개월+ & 50만+ 배팅  
+        medium: users.filter(u => u.active_months_count >= 3 && u.total_net_bet >= 100000), // 3개월+ & 10만+ 배팅
+        basic: users.filter(u => u.active_months_count >= 3 && u.total_net_bet < 100000) // 3개월+ & 10만 미만
+      };
+
+      console.log(`[HIGH-ACTIVITY-DORMANT] ${req.requestId}: Found ${users.length} users (query: ${queryTime}ms)`);
+
+      res.json({
+        status: "success",
+        message: "High-activity dormant users analysis completed",
+        criteria: {
+          activeMonthsRequired: "≥3개월 (월 10일+ 게임)",
+          dormantPeriod: "최근 30일간 게임기록 없음"
+        },
+        summary: summary,
+        groupedResults: {
+          premium: {
+            count: groupedUsers.premium.length,
+            criteria: "6개월+ 활동 & 100만+ 배팅",
+            users: groupedUsers.premium
+          },
+          high: {
+            count: groupedUsers.high.length,
+            criteria: "4개월+ 활동 & 50만+ 배팅",
+            users: groupedUsers.high
+          },
+          medium: {
+            count: groupedUsers.medium.length,
+            criteria: "3개월+ 활동 & 10만+ 배팅",
+            users: groupedUsers.medium.slice(0, 20) // 상위 20명만
+          },
+          basic: {
+            count: groupedUsers.basic.length,
+            criteria: "3개월+ 활동 & 10만 미만 배팅",
+            users: groupedUsers.basic.slice(0, 10) // 상위 10명만
+          }
+        },
+        queryTime: `${queryTime}ms`,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      console.error(`[HIGH-ACTIVITY-DORMANT-ERROR] ${req.requestId}:`, error);
+      res.status(500).json({
+        status: "error",
+        message: "High-activity dormant users analysis failed",
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+});

@@ -432,13 +432,22 @@
 
         // 메인 시스템으로 이동
         function goToMainSystem() {
-            // 원래 페이지로 리다이렉트
-            const returnUrl = localStorage.getItem('returnUrl');
-            if (returnUrl && returnUrl !== '/login.html') {
-                localStorage.removeItem('returnUrl');
-                window.location.href = returnUrl;
+            // URL 파라미터에서 redirect 확인
+            const urlParams = new URLSearchParams(window.location.search);
+            const redirectUrl = urlParams.get('redirect');
+            
+            if (redirectUrl) {
+                console.log('🔄 원래 페이지로 리다이렉트:', redirectUrl);
+                window.location.href = redirectUrl;
             } else {
-                window.location.href = 'index.html';
+                // 기존 localStorage 방식 백업
+                const returnUrl = localStorage.getItem('returnUrl');
+                if (returnUrl && returnUrl !== '/login.html') {
+                    localStorage.removeItem('returnUrl');
+                    window.location.href = returnUrl;
+                } else {
+                    window.location.href = 'index.html';
+                }
             }
         }
 
