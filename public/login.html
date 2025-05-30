@@ -3,7 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DB3 로그인 - 데이터베이스 분석 시스템</title>
+    <title>DB3 로그인</title>
+    
+    <!-- Firebase SDK (다른 페이지와 동일한 v8 compat 방식) -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -52,14 +57,6 @@
             margin-bottom: 30px;
         }
         
-        .auth-section {
-            margin: 30px 0;
-        }
-        
-        .auth-section.hidden {
-            display: none;
-        }
-        
         .google-btn {
             background: #4285f4;
             color: white;
@@ -89,421 +86,209 @@
             transform: none;
         }
         
-        .user-info {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            text-align: left;
-        }
-        
-        .user-avatar {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            margin: 0 auto 15px;
-            display: block;
-        }
-        
-        .user-name {
-            font-size: 1.3rem;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        
-        .user-email {
-            font-size: 1rem;
-            opacity: 0.8;
-            margin-bottom: 10px;
-        }
-        
-        .access-status {
-            padding: 10px 15px;
-            border-radius: 8px;
-            font-weight: bold;
-            margin: 15px 0;
-        }
-        
-        .access-granted {
-            background: rgba(76, 175, 80, 0.3);
-            color: #4CAF50;
-            border: 1px solid rgba(76, 175, 80, 0.5);
-        }
-        
-        .access-denied {
-            background: rgba(244, 67, 54, 0.3);
-            color: #f44336;
-            border: 1px solid rgba(244, 67, 54, 0.5);
-        }
-        
-        .btn {
-            padding: 12px 25px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin: 5px;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(45deg, #4CAF50, #45a049);
-            color: white;
-        }
-        
-        .btn-secondary {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-        }
-        
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid rgba(255,255,255,.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-        }
-        
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        
         .status-message {
-            padding: 15px;
+            margin: 20px 0;
+            padding: 10px;
             border-radius: 8px;
-            margin: 15px 0;
-            font-weight: bold;
+            font-size: 0.9rem;
         }
         
         .status-info {
-            background: rgba(33, 150, 243, 0.3);
-            color: #2196F3;
-            border: 1px solid rgba(33, 150, 243, 0.5);
+            background: rgba(33, 150, 243, 0.2);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+        }
+        
+        .status-success {
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.3);
         }
         
         .status-error {
-            background: rgba(244, 67, 54, 0.3);
-            color: #f44336;
-            border: 1px solid rgba(244, 67, 54, 0.5);
+            background: rgba(244, 67, 54, 0.2);
+            border: 1px solid rgba(244, 67, 54, 0.3);
         }
         
-        .status-warning {
-            background: rgba(255, 152, 0, 0.3);
-            color: #FF9800;
-            border: 1px solid rgba(255, 152, 0, 0.5);
-        }
-        
-        .footer {
-            margin-top: 30px;
-            opacity: 0.7;
-            font-size: 0.9rem;
-        }
-        
-        .emulator-info {
-            background: rgba(255, 193, 7, 0.2);
-            color: #FFC107;
-            border: 1px solid rgba(255, 193, 7, 0.4);
-            padding: 10px;
+        .back-btn {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 8px;
-            margin: 15px 0;
-            font-size: 0.9rem;
+            padding: 10px 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin-top: 20px;
         }
         
-        @media (max-width: 768px) {
-            .login-container {
-                padding: 30px 20px;
-                margin: 10px;
-            }
-            
-            .title {
-                font-size: 1.5rem;
-            }
+        .back-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
     <div class="login-container">
         <div class="logo">🔐</div>
-        <h1 class="title">DB3 시스템 로그인</h1>
-        <p class="subtitle">Hermes 데이터베이스 분석 시스템</p>
+        <h1 class="title">DB3 로그인</h1>
+        <p class="subtitle">데이터베이스 분석 시스템</p>
         
-        <!-- 에뮬레이터 안내 -->
-        <div id="emulatorNotice" class="emulator-info" style="display: none;">
-            🧪 <strong>개발 모드</strong>: Firebase 에뮬레이터 사용 중<br>
-            테스트용 이메일을 입력하세요: <strong>sandscasino8888@gmail.com</strong>
+        <div id="status-message" class="status-message status-info">
+            시스템 초기화 중...
         </div>
         
-        <!-- 인증 전 섹션 -->
-        <div id="loginSection" class="auth-section">
-            <div id="statusMessage" class="status-message status-info">
-                시스템 초기화 중...
-            </div>
-            
-            <button id="googleSignInBtn" class="google-btn" disabled>
-                <span id="btnIcon">🔄</span>
-                <span id="btnText">시스템 로딩 중...</span>
-            </button>
-            
-            <div class="emulator-info">
-                🧪 <strong>로컬 개발 환경</strong><br>
-                Firebase 에뮬레터 사용 중 (Auth: 9099, UI: 4000)
-            </div>
-        </div>
+        <button id="login-btn" class="google-btn" disabled>
+            🔄 로딩 중...
+        </button>
         
-        <!-- 인증 후 섹션 (사용자 정보) -->
-        <div id="userSection" class="auth-section hidden">
-            <img id="userAvatar" class="user-avatar" src="" alt="사용자 아바타">
-            <div class="user-info">
-                <div id="userName" class="user-name"></div>
-                <div id="userEmail" class="user-email"></div>
-                <div id="accessStatus" class="access-status"></div>
-            </div>
-            
-            <div class="auth-actions">
-                <button id="continueBtn" class="btn btn-primary" style="display: none;">
-                    🚀 시스템 접속
-                </button>
-                <button id="logoutBtn" class="btn btn-secondary">
-                    🚪 로그아웃
-                </button>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <p>🛡️ 보안 시스템 활성화</p>
-            <p>승인된 이메일만 접근 가능합니다</p>
-        </div>
+        <a href="/index.html" class="back-btn">🏠 메인으로 돌아가기</a>
     </div>
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { 
-            getAuth, 
-            GoogleAuthProvider, 
-            signInWithPopup, 
-            signOut, 
-            onAuthStateChanged,
-            connectAuthEmulator
-        } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-
-        // Firebase 설정 - 실제 프로젝트 설정
+    <script>
+        // Firebase 설정 (다른 페이지와 동일)
         const firebaseConfig = {
             apiKey: "AIzaSyD2RY02pN2RrhT8Qt2hTSEilRqV4JAbCR0",
             authDomain: "db888-67827.firebaseapp.com",
             projectId: "db888-67827",
             storageBucket: "db888-67827.firebasestorage.app",
             messagingSenderId: "888497598316",
-            appId: "1:888497598316:web:ad0cb0364d906c26658d49"
+            appId: "1:888497598316:web:b2cb26b0a825e11a658d49"
         };
 
         // Firebase 초기화
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        
-        // 에뮬레이터 연결 비활성화 (프로덕션 환경 사용)
-        /*
-        if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-            try {
-                connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
-                console.log('🧪 Firebase Auth 에뮬레이터 연결됨');
-                
-                // 에뮬레이터 안내 표시
-                const emulatorNotice = document.getElementById('emulatorNotice');
-                if (emulatorNotice) {
-                    emulatorNotice.style.display = 'block';
-                }
-            } catch (error) {
-                console.warn('Auth 에뮬레이터 연결 실패:', error);
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+            
+            // 로컬 개발 환경에서 Auth 에뮬레이터 사용
+            if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+                firebase.auth().useEmulator('http://127.0.0.1:9099');
+                console.log('🔥 Firebase Auth 에뮬레이터 연결');
             }
+            
+            console.log('🔥 Firebase 초기화 완료');
         }
-        */
-        console.log('🔥 Firebase Auth 프로덕션 환경 사용');
-
-        // Google 로그인 제공자
-        const provider = new GoogleAuthProvider();
-        provider.addScope('email');
-        provider.addScope('profile');
-
-        // 허용된 이메일 목록
-        const ALLOWED_EMAIL = 'sandscasino8888@gmail.com';
 
         // DOM 요소
-        const loginSection = document.getElementById('loginSection');
-        const userSection = document.getElementById('userSection');
-        const statusMessage = document.getElementById('statusMessage');
-        const googleSignInBtn = document.getElementById('googleSignInBtn');
-        const btnIcon = document.getElementById('btnIcon');
-        const btnText = document.getElementById('btnText');
-        const userAvatar = document.getElementById('userAvatar');
-        const userName = document.getElementById('userName');
-        const userEmail = document.getElementById('userEmail');
-        const accessStatus = document.getElementById('accessStatus');
-        const continueBtn = document.getElementById('continueBtn');
-        const logoutBtn = document.getElementById('logoutBtn');
+        const statusMessage = document.getElementById('status-message');
+        const loginBtn = document.getElementById('login-btn');
+        
+        // 허용된 이메일
+        const ALLOWED_EMAIL = 'sandscasino8888@gmail.com';
 
         // 상태 메시지 업데이트
         function updateStatus(message, type = 'info') {
             statusMessage.textContent = message;
             statusMessage.className = `status-message status-${type}`;
+            console.log(`📢 상태: ${message}`);
         }
 
         // 버튼 상태 업데이트
-        function updateButton(icon, text, disabled = false) {
-            btnIcon.textContent = icon;
-            btnText.textContent = text;
-            googleSignInBtn.disabled = disabled;
+        function updateButton(text, disabled = false) {
+            loginBtn.textContent = text;
+            loginBtn.disabled = disabled;
         }
 
-        // 사용자 접근 권한 확인
-        function checkAccess(email) {
-            return email === ALLOWED_EMAIL;
-        }
-
-        // 사용자 정보 표시
-        function displayUserInfo(user) {
-            const hasAccess = checkAccess(user.email);
-            
-            userAvatar.src = user.photoURL || '';
-            userName.textContent = user.displayName || '사용자';
-            userEmail.textContent = user.email;
-            
-            if (hasAccess) {
-                accessStatus.textContent = '✅ 접근 승인됨';
-                accessStatus.className = 'access-status access-granted';
-                continueBtn.style.display = 'inline-block';
-                
-                // JWT 토큰 생성 및 저장
-                user.getIdToken(true).then(token => {
-                    localStorage.setItem('db3_auth_token', token);
-                    localStorage.setItem('db3_user_email', user.email);
-                    localStorage.setItem('db3_user_name', user.displayName || '');
-                    console.log('🔑 인증 토큰 저장됨');
-                }).catch(error => {
-                    console.error('토큰 생성 실패:', error);
-                });
-            } else {
-                accessStatus.textContent = '❌ 접근 거부됨 - 승인되지 않은 이메일';
-                accessStatus.className = 'access-status access-denied';
-                continueBtn.style.display = 'none';
-            }
-        }
-
-        // Google 로그인
+        // Google 로그인 또는 에뮬레이터 테스트 로그인
         async function signInWithGoogle() {
             try {
-                updateButton('⏳', '로그인 중...', true);
-                updateStatus('Google 로그인 진행 중...', 'info');
+                updateButton('🔄 로그인 중...', true);
+                updateStatus('Google 로그인 시도 중...', 'info');
                 
-                const result = await signInWithPopup(auth, provider);
-                const user = result.user;
+                // 에뮬레이터 환경에서는 테스트 사용자 생성
+                if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+                    console.log('🧪 에뮬레이터 모드: 테스트 사용자로 로그인');
+                    
+                    // Firebase Auth 에뮬레이터에서 테스트 사용자 생성
+                    const testUserCredential = await firebase.auth().createUserWithEmailAndPassword(ALLOWED_EMAIL, 'testPassword123');
+                    
+                    // 사용자 프로필 업데이트
+                    await testUserCredential.user.updateProfile({
+                        displayName: 'Test User',
+                        photoURL: 'https://via.placeholder.com/40'
+                    });
+                    
+                    console.log('✅ 테스트 사용자 생성 완료:', testUserCredential.user.email);
+                    
+                } else {
+                    // 프로덕션 환경에서는 실제 Google 로그인
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    const result = await firebase.auth().signInWithPopup(provider);
+                    console.log('✅ Google 로그인 성공:', result.user.email);
+                }
                 
-                console.log('✅ 로그인 성공:', user.email);
-                updateStatus('로그인 성공! 사용자 정보를 확인 중...', 'info');
+                updateStatus('로그인 성공! 확인 중...', 'success');
                 
             } catch (error) {
                 console.error('❌ 로그인 실패:', error);
-                updateStatus(`로그인 실패: ${error.message}`, 'error');
-                updateButton('🔑', 'Google로 로그인', false);
-            }
-        }
-
-        // 로그아웃
-        async function logout() {
-            try {
-                await signOut(auth);
-                localStorage.removeItem('db3_auth_token');
-                localStorage.removeItem('db3_user_email');
-                localStorage.removeItem('db3_user_name');
-                console.log('✅ 로그아웃 완료');
-            } catch (error) {
-                console.error('❌ 로그아웃 실패:', error);
-                updateStatus(`로그아웃 실패: ${error.message}`, 'error');
+                
+                // 이미 존재하는 사용자인 경우 로그인 시도
+                if (error.code === 'auth/email-already-in-use') {
+                    try {
+                        console.log('🔄 기존 사용자로 로그인 시도...');
+                        await firebase.auth().signInWithEmailAndPassword(ALLOWED_EMAIL, 'testPassword123');
+                        console.log('✅ 기존 사용자 로그인 성공');
+                        updateStatus('로그인 성공!', 'success');
+                    } catch (signInError) {
+                        console.error('❌ 기존 사용자 로그인 실패:', signInError);
+                        updateStatus(`로그인 실패: ${signInError.message}`, 'error');
+                        updateButton('🔑 Google로 로그인', false);
+                    }
+                } else {
+                    updateStatus(`로그인 실패: ${error.message}`, 'error');
+                    updateButton('🔑 Google로 로그인', false);
+                }
             }
         }
 
         // 메인 시스템으로 이동
         function goToMainSystem() {
-            // URL 파라미터에서 redirect 확인
-            const urlParams = new URLSearchParams(window.location.search);
-            const redirectUrl = urlParams.get('redirect');
+            console.log('🚀 메인 시스템으로 이동');
+            updateStatus('메인 페이지로 이동 중...', 'success');
             
-            if (redirectUrl) {
-                console.log('🔄 원래 페이지로 리다이렉트:', redirectUrl);
-                window.location.href = redirectUrl;
-            } else {
-                // 기존 localStorage 방식 백업
-                const returnUrl = localStorage.getItem('returnUrl');
-                if (returnUrl && returnUrl !== '/login.html') {
-                    localStorage.removeItem('returnUrl');
-                    window.location.href = returnUrl;
-                } else {
-                    window.location.href = 'index.html';
-                }
-            }
+            // 확실한 이동을 위해 setTimeout 사용
+            setTimeout(() => {
+                window.location.href = '/index.html';
+            }, 500);
         }
 
-        // 인증 상태 감지 (단순화)
-        onAuthStateChanged(auth, async (user) => {
+        // Firebase Auth 상태 감지 (단순한 버전)
+        firebase.auth().onAuthStateChanged((user) => {
+            console.log('🔄 Auth 상태 변화:', user ? user.email : 'null');
+            
             if (user) {
                 // 로그인됨
-                console.log('👤 사용자 로그인됨:', user.email);
-                
-                // 이메일 검증
                 if (user.email === ALLOWED_EMAIL) {
-                    console.log('✅ 허용된 이메일 - 시스템 접근 허용');
-                    updateStatus('접근 승인됨! 시스템으로 이동 중...', 'success');
+                    console.log('✅ 허용된 사용자:', user.email);
+                    updateStatus('접근 승인됨! 메인으로 이동합니다.', 'success');
+                    updateButton('✅ 로그인 완료', true);
                     
-                    // JWT 토큰 저장
-                    try {
-                        const token = await user.getIdToken();
-                        localStorage.setItem('authToken', token);
-                        localStorage.setItem('userEmail', user.email);
-                        
-                        // 1초 후 리다이렉트
-                        setTimeout(() => {
-                            goToMainSystem();
-                        }, 1000);
-                        
-                    } catch (error) {
-                        console.error('토큰 저장 실패:', error);
-                        updateStatus('토큰 저장 실패', 'error');
-                    }
+                    // 1초 후 메인으로 이동
+                    setTimeout(goToMainSystem, 1000);
+                    
                 } else {
                     console.warn('🚫 허용되지 않은 이메일:', user.email);
-                    updateStatus(`접근 거부: ${user.email}은 허용되지 않은 계정입니다.`, 'error');
+                    updateStatus(`접근 거부: ${user.email}`, 'error');
                     
                     // 로그아웃 처리
-                    await signOut(auth);
-                    updateButton('🔑', 'Google로 로그인', false);
+                    firebase.auth().signOut();
+                    updateButton('🔑 Google로 로그인', false);
                 }
             } else {
                 // 로그아웃됨
-                console.log('👤 사용자 로그아웃됨');
-                loginSection.classList.remove('hidden');
-                userSection.classList.add('hidden');
+                console.log('🔓 로그아웃 상태');
                 updateStatus('Google 계정으로 로그인하세요', 'info');
-                updateButton('🔑', 'Google로 로그인', false);
+                updateButton('🔑 Google로 로그인', false);
             }
         });
 
-        // 이벤트 리스너
-        googleSignInBtn.addEventListener('click', signInWithGoogle);
-        logoutBtn.addEventListener('click', logout);
-        continueBtn.addEventListener('click', goToMainSystem);
+        // 로그인 버튼 이벤트
+        loginBtn.addEventListener('click', signInWithGoogle);
 
         // 초기화 완료
         setTimeout(() => {
-            updateStatus('시스템 준비 완료', 'info');
-            updateButton('🔑', 'Google로 로그인', false);
+            updateStatus('준비 완료 - Google 로그인을 클릭하세요', 'info');
+            updateButton('🔑 Google로 로그인', false);
         }, 1000);
     </script>
 </body>

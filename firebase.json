@@ -22,14 +22,14 @@
       "port": 9099
     },
     "functions": {
-      "port": 9003
+      "port": 9004
     },
     "hosting": {
-      "port": 8083
+      "port": 8084
     },
     "ui": {
       "enabled": true,
-      "port": 4003
+      "port": 4004
     }
   }
 }

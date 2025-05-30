@@ -302,10 +302,40 @@
     <script>
         // 페이지 로드 시 인증 확인
         document.addEventListener('DOMContentLoaded', function() {
-            if (typeof protectPage === 'function') {
+            // 개발 환경에서는 인증 우회
+            if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
+                console.log('🧪 개발 모드: 인증 우회');
+                updateAuthUI(true, {
+                    email: 'dev@localhost.com',
+                    displayName: 'Development User',
+                    photoURL: 'https://via.placeholder.com/32'
+                });
+            } else if (typeof protectPage === 'function') {
                 protectPage();
             }
         });
+
+        // 개발 모드용 UI 업데이트 함수
+        function updateAuthUI(isAuthenticated, mockUser = null) {
+            const authInfo = document.getElementById('auth-info');
+            const loginBtn = document.getElementById('login-btn');
+            const logoutBtn = document.getElementById('logout-btn');
+            
+            if (isAuthenticated && mockUser) {
+                if (authInfo) {
+                    authInfo.innerHTML = `
+                        <div class="d-flex align-items-center">
+                            <img src="${mockUser.photoURL}" 
+                                 class="rounded-circle me-2" width="32" height="32">
+                            <span class="text-white">${mockUser.displayName}</span>
+                            <small class="text-warning ms-2">[DEV]</small>
+                        </div>
+                    `;
+                }
+                if (loginBtn) loginBtn.style.display = 'none';
+                if (logoutBtn) logoutBtn.style.display = 'inline-block';
+            }
+        }
 
         // 분석 실행 함수
         async function executeAnalysis(analysisType) {
