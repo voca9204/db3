@@ -19,7 +19,7 @@ if (!firebase.apps.length) {
     
     // 로컬 개발 환경에서 Auth 에뮬레이터 사용
     if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
-        firebase.auth().useEmulator('http://127.0.0.1:9099');
+        firebase.auth().useEmulator('http://127.0.0.1:50890');
         console.log('🔥 Firebase Auth 에뮬레이터 연결');
     }
     

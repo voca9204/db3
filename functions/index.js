@@ -37,6 +37,11 @@ exports.helloWorld = basicAPI.helloWorld;
 exports.testConnection = basicAPI.testConnection;
 exports.getSystemStatus = basicAPI.getSystemStatus;
 exports.getSystemHealth = basicAPI.getSystemHealth;
+// TEST ONLY APIs - Local Development
+exports.getTableSchema = basicAPI.getTableSchema;
+exports.getUserContactInfo = basicAPI.getUserContactInfo;
+exports.exploreContactTables = basicAPI.exploreContactTables;
+exports.getFullContactInfo = basicAPI.getFullContactInfo;
 
 // ==================== BUSINESS ANALYSIS APIs ====================
 // From api/analysis.js

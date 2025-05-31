@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>연락처 시스템 테스트</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/css/analysis-result.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4"><i class="fas fa-phone me-2"></i>연락처 시스템 테스트</h1>
+        
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-test me-2"></i>연락처 정보 표시 테스트</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>사용자ID</th>
+                            <th>등급</th>
+                            <th>전화번호</th>
+                            <th>위챗</th>
+                            <th>연락처 상태</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>user001</td>
+                            <td><span class="tier-badge tier-premium">P</span></td>
+                            <td>
+                                <span class="contact-info phone-available">
+                                    <i class="fas fa-phone text-success me-1"></i>010-1234-5678
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-info wechat-available">
+                                    <i class="fab fa-weixin text-success me-1"></i>user_wechat
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-status both">
+                                    <i class="fas fa-check-double text-success me-1"></i>
+                                    <span class="badge bg-success">전화+위챗</span>
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>user002</td>
+                            <td><span class="tier-badge tier-high">H</span></td>
+                            <td>
+                                <span class="contact-info phone-available">
+                                    <i class="fas fa-phone text-success me-1"></i>010-9876-5432
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-info contact-unavailable">
+                                    <i class="fab fa-weixin text-muted"></i> 없음
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-status phone">
+                                    <i class="fas fa-phone text-primary me-1"></i>
+                                    <span class="badge bg-primary">전화만</span>
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>user003</td>
+                            <td><span class="tier-badge tier-medium">M</span></td>
+                            <td>
+                                <span class="contact-info contact-unavailable">
+                                    <i class="fas fa-phone-slash text-muted"></i> 없음
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-info wechat-available">
+                                    <i class="fab fa-weixin text-success me-1"></i>wechat123
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-status wechat">
+                                    <i class="fab fa-weixin text-info me-1"></i>
+                                    <span class="badge bg-info">위챗만</span>
+                                </span>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>user004</td>
+                            <td><span class="tier-badge tier-basic">B</span></td>
+                            <td>
+                                <span class="contact-info contact-unavailable">
+                                    <i class="fas fa-phone-slash text-muted"></i> 없음
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-info contact-unavailable">
+                                    <i class="fab fa-weixin text-muted"></i> 없음
+                                </span>
+                            </td>
+                            <td>
+                                <span class="contact-status none">
+                                    <i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                                    <span class="badge bg-warning text-dark">연락처 없음</span>
+                                </span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div class="mt-4">
+                    <h6>연락처 시스템 특징:</h6>
+                    <ul>
+                        <li><strong>등급 표시</strong>: P(프리미엄), H(하이), M(미디엄), B(베이직) - 공간 절약</li>
+                        <li><strong>전화번호 포맷팅</strong>: 010-1234-5678 형식으로 자동 변환</li>
+                        <li><strong>상태별 색상</strong>: 있음(녹색), 없음(회색)으로 구분</li>
+                        <li><strong>아이콘 활용</strong>: Font Awesome으로 직관적 표현</li>
+                        <li><strong>상태 배지</strong>: 전화+위챗/전화만/위챗만/없음 구분</li>
+                        <li><strong>대표ID 표시</strong>: 계정상태 제거, 대표ID로 상태 파악 가능</li>
+                    </ul>
+                </div>
+                
+                <div class="mt-3">
+                    <a href="/analysis-result.html" class="btn btn-primary">
+                        <i class="fas fa-chart-line me-2"></i>실제 분석 결과 보기
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

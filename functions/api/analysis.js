@@ -4,7 +4,12 @@
  */
 
 const functions = require('firebase-functions');
-const cors = require('cors')({ origin: true });
+const cors = require('cors')({ 
+  origin: true,
+  credentials: true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+});
 
 // Import database utilities
 const { executeQuery, queryOne } = require('../db');
@@ -19,6 +24,19 @@ const { getInactiveNewUsers } = require('../inactiveNewUsersAnalysis');
  * Authentication middleware for protected APIs
  */
 async function authenticateUser(req, res, callback) {
+  // 개발 환경에서는 인증 우회 (localhost, 127.0.0.1, 에뮬레이터 감지)
+  const host = req.get('host') || '';
+  const isDevelopment = host.includes('localhost') || 
+                       host.includes('127.0.0.1') ||
+                       process.env.FUNCTIONS_EMULATOR === 'true' ||
+                       process.env.NODE_ENV !== 'production';
+  
+  if (isDevelopment) {
+    console.log('🧪 개발 모드 감지: 인증 우회, Host:', host);
+    req.user = { email: 'dev@localhost', uid: 'dev-mode' };
+    return await callback();
+  }
+  
   const authHeader = req.headers.authorization;
   
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -57,8 +75,9 @@ async function authenticateUser(req, res, callback) {
  * User Game Activity Analysis
  * Returns detailed game activity statistics for users
  */
-exports.getUserGameActivity = functions.https.onRequest(async (req, res) => {
-  await authenticateUser(req, res, async () => {
+exports.getUserGameActivity = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    await authenticateUser(req, res, async () => {
     try {
       const { limit = 100, minNetBet = 0, minGameDays = 0 } = req.query;
       
@@ -108,6 +127,7 @@ exports.getUserGameActivity = functions.https.onRequest(async (req, res) => {
         timestamp: new Date().toISOString()
       });
     }
+    });
   });
 });
 
@@ -115,8 +135,9 @@ exports.getUserGameActivity = functions.https.onRequest(async (req, res) => {
  * Dormant Users Query  
  * Returns users who haven't been active for specified period
  */
-exports.getDormantUsers = functions.https.onRequest(async (req, res) => {
-  await authenticateUser(req, res, async () => {
+exports.getDormantUsers = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    await authenticateUser(req, res, async () => {
     try {
       const { 
         limit = 50, 
@@ -176,8 +197,9 @@ exports.getDormantUsers = functions.https.onRequest(async (req, res) => {
  * Event Participation Analysis
  * Returns event participation statistics for users
  */
-exports.getEventParticipationAnalysis = functions.https.onRequest(async (req, res) => {
-  await authenticateUser(req, res, async () => {
+exports.getEventParticipationAnalysis = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    await authenticateUser(req, res, async () => {
     try {
       const { limit = 50 } = req.query;
       
@@ -217,6 +239,7 @@ exports.getEventParticipationAnalysis = functions.https.onRequest(async (req, re
         timestamp: new Date().toISOString()
       });
     }
+    });
   });
 });
 
@@ -323,6 +346,7 @@ exports.downloadInactiveUsersCSV = functions.https.onRequest((req, res) => {
         message: error.message
       });
     }
+    });
   });
 });
 
@@ -330,15 +354,20 @@ exports.downloadInactiveUsersCSV = functions.https.onRequest((req, res) => {
  * High Activity Dormant Users Analysis
  * Returns users with high past activity who are currently dormant
  */
-exports.getHighActivityDormantUsers = functions.https.onRequest(async (req, res) => {
-  await authenticateUser(req, res, async () => {
+exports.getHighActivityDormantUsers = functions.https.onRequest((req, res) => {
+  cors(req, res, async () => {
+    await authenticateUser(req, res, async () => {
     try {
       // Pagination parameters
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 50;
+      const representativeOnly = req.query.representativeOnly === 'true'; // 새로운 매개변수
       const offset = (page - 1) * limit;
       
-      console.log(`[HIGH-ACTIVITY-DORMANT] ${req.requestId}: Page ${page}, Limit ${limit}, Offset ${offset}`);
+      // 날짜 기준 매개변수 추가 (기본값: 2025-05-01로 고정)
+      const recentThresholdDate = req.query.recentThreshold || '2025-05-01';
+      
+      console.log(`[HIGH-ACTIVITY-DORMANT] ${req.requestId}: Page ${page}, Limit ${limit}, Offset ${offset}, RecentThreshold: ${recentThresholdDate}`);
 
       const startTime = Date.now();
 
@@ -364,21 +393,43 @@ exports.getHighActivityDormantUsers = functions.https.onRequest(async (req, res)
         recent_activity AS (
           SELECT DISTINCT userId
           FROM game_scores 
-          WHERE gameDate >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+          WHERE gameDate >= ?  -- 매개변수로 받은 날짜 사용
+        ),
+        group_representatives AS (
+          SELECT 
+            pg.guild,
+            p.userId as representative_id,
+            ROW_NUMBER() OVER (PARTITION BY pg.guild ORDER BY COALESCE(MAX(gs.gameDate), '1900-01-01') DESC) as rn
+          FROM player_guilds pg
+          JOIN players p ON pg.player = p.id
+          LEFT JOIN game_scores gs ON p.userId = gs.userId
+          GROUP BY pg.guild, p.userId
+        ),
+        event_counts AS (
+          SELECT 
+            p.userId,
+            COUNT(pp.promotion) as total_events,
+            COUNT(CASE WHEN pp.appliedAt IS NOT NULL THEN 1 END) as applied_events
+          FROM players p
+          LEFT JOIN promotion_players pp ON p.id = pp.player
+          GROUP BY p.userId
         )
         SELECT COUNT(DISTINCT p.userId) as total_count
         FROM active_months am
         JOIN players p ON p.userId = am.userId 
         JOIN game_scores gs ON gs.userId = p.userId
         LEFT JOIN recent_activity ra ON ra.userId = p.userId
+        LEFT JOIN player_guilds pg ON p.id = pg.player
+        LEFT JOIN group_representatives gr ON pg.guild = gr.guild AND gr.rn = 1
         WHERE ra.userId IS NULL
+        ${representativeOnly ? 'AND (pg.guild IS NULL OR p.userId = gr.representative_id)' : ''}
       `;
 
-      const countResult = await executeQuery(countQuery);
+      const countResult = await executeQuery(countQuery, [recentThresholdDate]);
       const totalCount = countResult[0]?.total_count || 0;
       const totalPages = Math.ceil(totalCount / limit);
 
-      // Main query with pagination
+      // Main query with pagination - 대표ID 및 그룹 총 유효배팅 포함 + 연락처 정보 추가
       const queryText = `
         WITH monthly_game_days AS (
           SELECT 
@@ -400,45 +451,121 @@ exports.getHighActivityDormantUsers = functions.https.onRequest(async (req, res)
         recent_activity AS (
           SELECT DISTINCT userId
           FROM game_scores 
-          WHERE gameDate >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+          WHERE gameDate >= ?  -- 매개변수로 받은 날짜 사용
+        ),
+        group_representatives AS (
+          SELECT 
+            pg.guild,
+            p.userId as representative_id,
+            ROW_NUMBER() OVER (PARTITION BY pg.guild ORDER BY COALESCE(MAX(gs.gameDate), '1900-01-01') DESC) as rn
+          FROM player_guilds pg
+          JOIN players p ON pg.player = p.id
+          LEFT JOIN game_scores gs ON p.userId = gs.userId
+          GROUP BY pg.guild, p.userId
+        ),
+        group_totals AS (
+          SELECT 
+            pg.guild,
+            SUM(gs.netBet) as group_total_netbet,
+            SUM(gs.winLoss) as group_total_winloss,
+            COUNT(DISTINCT gs.gameDate) as group_total_game_days,
+            MIN(gs.gameDate) as group_first_game_date
+          FROM player_guilds pg
+          JOIN players p ON pg.player = p.id
+          JOIN game_scores gs ON p.userId = gs.userId
+          GROUP BY pg.guild
+        ),
+        event_counts AS (
+          SELECT 
+            p.userId,
+            COUNT(pp.promotion) as total_events,
+            COUNT(CASE WHEN pp.appliedAt IS NOT NULL THEN 1 END) as applied_events
+          FROM players p
+          LEFT JOIN promotion_players pp ON p.id = pp.player
+          GROUP BY p.userId
+        ),
+        contact_info AS (
+          SELECT 
+            p.userId,
+            MAX(CASE WHEN pc.contactType = 'phone' THEN pc.contact END) as phone_number,
+            MAX(CASE WHEN pc.contactType = 'wechat' THEN pc.contact END) as wechat_id,
+            p.phoneName as phone_memo,
+            p.note as additional_note
+          FROM players p
+          LEFT JOIN player_contacts pc ON p.id = pc.player
+          GROUP BY p.userId, p.phoneName, p.note
         )
         SELECT 
           p.userId,
           am.months_with_10plus_days,
           COUNT(DISTINCT gs.gameDate) as total_game_days,
-          ROUND(SUM(gs.netBet)) as total_netbet,
-          ROUND(SUM(gs.winLoss)) as total_winloss,
+          ROUND(SUM(gs.netBet)) as individual_netbet,
+          ROUND(SUM(gs.winLoss)) as individual_winloss,
           MIN(gs.gameDate) as first_game_date,
           MAX(gs.gameDate) as last_game_date,
-          DATEDIFF(CURDATE(), MAX(gs.gameDate)) as days_since_last_game,
-          ROUND(SUM(gs.netBet) / COUNT(DISTINCT gs.gameDate)) as avg_daily_netbet
+          DATEDIFF('2025-05-31', MAX(gs.gameDate)) as days_since_last_game,
+          ROUND(SUM(gs.netBet) / COUNT(DISTINCT gs.gameDate)) as avg_daily_netbet,
+          pg.guild as group_id,
+          gr.representative_id,
+          CASE WHEN p.userId = gr.representative_id THEN 'Y' ELSE 'N' END as is_representative,
+          ROUND(COALESCE(gt.group_total_netbet, SUM(gs.netBet))) as group_total_netbet,
+          ROUND(COALESCE(gt.group_total_winloss, SUM(gs.winLoss))) as group_total_winloss,
+          COALESCE(gt.group_total_game_days, COUNT(DISTINCT gs.gameDate)) as group_total_game_days,
+          COALESCE(gt.group_first_game_date, MIN(gs.gameDate)) as group_first_game_date,
+          COALESCE(ec.applied_events, 0) as event_count,
+          ci.phone_number,
+          ci.wechat_id,
+          ci.phone_memo,
+          ci.additional_note,
+          CASE 
+            WHEN ci.phone_number IS NOT NULL AND ci.wechat_id IS NOT NULL THEN 'Both'
+            WHEN ci.phone_number IS NOT NULL THEN 'Phone'
+            WHEN ci.wechat_id IS NOT NULL THEN 'WeChat'
+            ELSE 'None'
+          END as contact_availability
         FROM active_months am
         JOIN players p ON p.userId = am.userId 
         JOIN game_scores gs ON gs.userId = p.userId
         LEFT JOIN recent_activity ra ON ra.userId = p.userId
+        LEFT JOIN player_guilds pg ON p.id = pg.player
+        LEFT JOIN group_representatives gr ON pg.guild = gr.guild AND gr.rn = 1
+        LEFT JOIN group_totals gt ON pg.guild = gt.guild
+        LEFT JOIN event_counts ec ON p.userId = ec.userId
+        LEFT JOIN contact_info ci ON p.userId = ci.userId
         WHERE ra.userId IS NULL
-        GROUP BY p.userId, am.months_with_10plus_days
-        ORDER BY total_netbet DESC
+        ${representativeOnly ? 'AND (pg.guild IS NULL OR p.userId = gr.representative_id)' : ''}
+        GROUP BY p.userId, am.months_with_10plus_days, pg.guild, gr.representative_id, gt.group_total_netbet, gt.group_total_winloss, gt.group_total_game_days, gt.group_first_game_date, ci.phone_number, ci.wechat_id, ci.phone_memo, ci.additional_note
+        ORDER BY COALESCE(gt.group_total_netbet, SUM(gs.netBet)) DESC
         LIMIT ? OFFSET ?
       `;
 
-      const results = await executeQuery(queryText, [limit, offset]);
+      const results = await executeQuery(queryText, [recentThresholdDate, limit, offset]);
       const queryTime = Date.now() - startTime;
 
-      // Classification logic
+      // Classification logic - 그룹 전체 유효배팅 기준으로 등급 분류
       const classifiedResults = results.map(user => {
-        const netBet = user.total_netbet || 0;
+        const groupNetBet = user.group_total_netbet || user.individual_netbet || 0;
         const gameDays = user.total_game_days || 0;
         
         let tier = 'Basic';
-        if (netBet >= 1000000 && gameDays >= 50) tier = 'Premium';
-        else if (netBet >= 500000 && gameDays >= 30) tier = 'High';
-        else if (netBet >= 100000 && gameDays >= 15) tier = 'Medium';
+        // Premium: 그룹 전체 유효배팅 500만원+ AND 게임일수 200일+
+        if (groupNetBet >= 5000000 && gameDays >= 200) tier = 'Premium';
+        // High: 그룹 전체 유효배팅 130만원+ AND 게임일수 120일+
+        else if (groupNetBet >= 1300000 && gameDays >= 120) tier = 'High';
+        // Medium: 그룹 전체 유효배팅 20만원+ AND 게임일수 80일+
+        else if (groupNetBet >= 200000 && gameDays >= 80) tier = 'Medium';
+        // Basic: 하위 25% - 위 조건에 해당하지 않는 사용자
         
         return {
           ...user,
           tier,
-          priority: tier === 'Premium' ? 1 : tier === 'High' ? 2 : tier === 'Medium' ? 3 : 4
+          priority: tier === 'Premium' ? 1 : tier === 'High' ? 2 : tier === 'Medium' ? 3 : 4,
+          // 보고서 표시용: 그룹ID 대신 대표ID 또는 단독 표시
+          display_representative: user.representative_id || '단독',
+          // 그룹 정보: 그룹에 속한 경우만 대표ID, 아니면 단독
+          group_status: user.group_id ? 
+            (user.is_representative === 'Y' ? `대표 (${user.representative_id})` : `연결 (${user.representative_id})`) 
+            : '단독'
         };
       });
 
@@ -474,5 +601,6 @@ exports.getHighActivityDormantUsers = functions.https.onRequest(async (req, res)
         timestamp: new Date().toISOString()
       });
     }
+    });
   });
 });

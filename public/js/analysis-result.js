@@ -1,694 +1,760 @@
-        // 전역 변수
-        let analysisData = null;
-        let analysisType = null;
-        let isAuthenticated = false;
+// DB3 분석 결과 페이지 JavaScript
+class AnalysisResultManager {
+    constructor() {
+        this.currentData = null;
+        this.currentPage = 1;
+        this.itemsPerPage = 20;
+        this.tierFilter = '';
+        this.representativeOnly = false;
+        this.charts = {};
+        
+        this.init();
+    }
 
-        // 페이지 로드 시 실행
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🎯 분석 결과 페이지 로드 시작');
+    init() {
+        console.log('🎯 분석 결과 페이지 초기화 중...');
+        
+        // DOM 로드 완료 후 실행
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => this.setup());
+        } else {
+            this.setup();
+        }
+    }
+
+    setup() {
+        this.setupEventListeners();
+        this.loadAnalysisData();
+    }
+
+    setupEventListeners() {
+        // 재시도 버튼
+        const retryBtn = document.getElementById('retry-btn');
+        if (retryBtn) {
+            retryBtn.addEventListener('click', () => this.loadAnalysisData());
+        }
+
+        // 등급 필터
+        const tierFilter = document.getElementById('tier-filter');
+        if (tierFilter) {
+            tierFilter.addEventListener('change', (e) => {
+                this.tierFilter = e.target.value;
+                this.currentPage = 1;
+                this.renderTable();
+                this.renderPagination();
+            });
+        }
+
+        // 대표ID만 보기 필터
+        const representativeFilter = document.getElementById('representative-only-filter');
+        if (representativeFilter) {
+            representativeFilter.addEventListener('change', (e) => {
+                this.representativeOnly = e.target.checked;
+                this.currentPage = 1;
+                this.loadAnalysisData(); // 전체 데이터 다시 로드
+            });
+        }
+
+        // CSV 다운로드
+        const csvBtn = document.getElementById('csv-download-btn');
+        if (csvBtn) {
+            csvBtn.addEventListener('click', () => this.downloadCSV());
+        }
+
+        // 로그아웃 버튼
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', () => {
+                if (typeof signOut === 'function') {
+                    signOut();
+                } else {
+                    window.location.href = '/login.html';
+                }
+            });
+        }
+    }
+
+    async loadAnalysisData() {
+        console.log('📊 고가치 휴면 사용자 분석 데이터 로딩 시작...');
+        
+        this.showLoading();
+        
+        try {
+            const data = await this.callAPI('getHighActivityDormantUsers', { 
+                limit: 500,  // 전체 고가치 휴면 사용자 (299명 + 여유분)
+                page: 1,
+                representativeOnly: this.representativeOnly 
+            });
+            console.log('✅ 고가치 휴면 사용자 데이터 로드 성공:', data);
+            console.log(`📊 총 ${data.data?.length || 0}명의 고가치 휴면 사용자 확인`);
             
-            // URL 파라미터에서 분석 타입 추출
-            const urlParams = new URLSearchParams(window.location.search);
-            analysisType = urlParams.get('type');
+            this.currentData = data;
+            this.renderResults();
+            
+        } catch (error) {
+            console.error('❌ 데이터 로드 실패:', error);
+            this.showError(error.message);
+        }
+    }
 
-            if (!analysisType) {
-                showError('분석 타입이 지정되지 않았습니다.');
-                return;
+    async callAPI(endpoint, params = {}) {
+        const retries = 3;
+        
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                console.log(`🔄 API 호출 시도 ${attempt}/${retries}: ${endpoint}`);
+                
+                // URL 생성
+                const baseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+                    ? 'http://127.0.0.1:50888/db888-67827/us-central1'
+                    : 'https://us-central1-db888-67827.cloudfunctions.net';
+                
+                const queryString = new URLSearchParams(params).toString();
+                const url = `${baseUrl}/${endpoint}${queryString ? '?' + queryString : ''}`;
+                
+                // 헤더 설정
+                const headers = { 'Content-Type': 'application/json' };
+                
+                // 인증 토큰 추가 (개발 모드에서는 선택적)
+                if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+                    if (typeof getAuthToken === 'function') {
+                        const token = await getAuthToken();
+                        if (token) {
+                            headers['Authorization'] = `Bearer ${token}`;
+                        }
+                    }
+                } else {
+                    console.log('🧪 개발 모드: 인증 우회하여 API 호출');
+                }
+
+                const response = await fetch(url, { headers });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const result = await response.json();
+                console.log(`✅ API 호출 성공: ${endpoint}`);
+                return result;
+                
+            } catch (error) {
+                console.error(`❌ API 호출 실패 (시도 ${attempt}/${retries}):`, error.message);
+                
+                if (attempt === retries) {
+                    throw error;
+                }
+                
+                // 재시도 전 대기
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
             }
+        }
+    }
 
-            // 인증 확인 후 분석 실행
-            initializeAuthentication();
+    showLoading() {
+        document.getElementById('loading-container').classList.remove('d-none');
+        document.getElementById('error-container').classList.add('d-none');
+        document.getElementById('results-container').classList.add('d-none');
+    }
+
+    showError(message) {
+        document.getElementById('loading-container').classList.add('d-none');
+        document.getElementById('error-container').classList.remove('d-none');
+        document.getElementById('results-container').classList.add('d-none');
+        
+        const errorMessage = document.getElementById('error-message');
+        if (errorMessage) {
+            errorMessage.textContent = message;
+        }
+    }
+
+    showResults() {
+        document.getElementById('loading-container').classList.add('d-none');
+        document.getElementById('error-container').classList.add('d-none');
+        document.getElementById('results-container').classList.remove('d-none');
+    }
+
+    renderResults() {
+        console.log('🎨 고가치 휴면 사용자 결과 렌더링 시작...');
+        
+        if (!this.currentData || !this.currentData.data) {
+            throw new Error('유효하지 않은 데이터 형식');
+        }
+
+        this.showResults();
+        
+        // 각 섹션 렌더링
+        this.renderSummaryStats();
+        this.renderCharts();
+        this.renderTable();
+        this.renderPagination();
+        this.renderMarketingSuggestions();
+        
+        console.log('✅ 고가치 휴면 사용자 결과 렌더링 완료');
+    }
+
+    renderSummaryStats() {
+        const data = this.currentData.data;
+        const summary = this.currentData.summary || {};
+        const container = document.getElementById('summary-stats');
+        
+        if (!container || !data || data.length === 0) return;
+
+        // 통계 계산
+        const totalUsers = summary.totalUsers || data.length;
+        const totalBetting = data.reduce((sum, user) => sum + (user.total_netbet || 0), 0);
+        const avgBetting = totalBetting / totalUsers;
+
+        // 등급별 분포 (API에서 제공)
+        const tierCounts = summary.tierDistribution || {};
+
+        const stats = [
+            {
+                icon: 'fas fa-users',
+                number: totalUsers.toLocaleString(),
+                label: '고가치 휴면 사용자'
+            },
+            {
+                icon: 'fas fa-user-clock',
+                number: totalUsers.toLocaleString(),
+                label: '휴면 상태'
+            },
+            {
+                icon: 'fas fa-coins',
+                number: Math.round(avgBetting).toLocaleString() + '원',
+                label: '평균 유효배팅'
+            },
+            {
+                icon: 'fas fa-crown',
+                number: (tierCounts['Premium'] || 0).toLocaleString(),
+                label: '프리미엄 등급'
+            },
+            {
+                icon: 'fas fa-medal',
+                number: (tierCounts['High'] || 0).toLocaleString(),
+                label: '하이 등급'
+            },
+            {
+                icon: 'fas fa-trophy',
+                number: (tierCounts['Medium'] || 0).toLocaleString(),
+                label: '미디엄 등급'
+            }
+        ];
+
+        container.innerHTML = stats.map(stat => `
+            <div class="col-md-2 col-sm-4 col-6">
+                <div class="summary-stat fade-in-up">
+                    <i class="${stat.icon} stat-icon"></i>
+                    <span class="stat-number">${stat.number}</span>
+                    <div class="stat-label">${stat.label}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    renderCharts() {
+        this.renderTierChart();
+        this.renderActivityChart();
+    }
+
+    renderTierChart() {
+        const canvas = document.getElementById('tier-chart');
+        if (!canvas || !this.currentData) return;
+
+        const tierCounts = this.currentData.summary?.tierDistribution || {};
+
+        // 기존 차트 제거
+        if (this.charts.tier) {
+            this.charts.tier.destroy();
+        }
+
+        this.charts.tier = new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(tierCounts),
+                datasets: [{
+                    data: Object.values(tierCounts),
+                    backgroundColor: [
+                        '#1976d2', // Premium - 파랑
+                        '#f57c00', // High - 주황
+                        '#388e3c', // Medium - 초록
+                        '#616161'  // Basic - 회색
+                    ],
+                    borderColor: [
+                        '#1565c0',
+                        '#ef6c00', 
+                        '#2e7d32',
+                        '#424242'
+                    ],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
         });
+    }
 
-        // 인증 초기화 및 분석 실행 (개발 모드 지원)
-        async function initializeAuthentication() {
-            try {
-                console.log('🔒 인증 초기화 시작...');
-                
-                // 개발 환경에서는 인증 우회
-                if (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') {
-                    console.log('🧪 개발 모드: 인증 우회');
-                    isAuthenticated = true;
-                    
-                    // 개발 모드 UI 업데이트
-                    updateDevAuthUI();
-                    
-                    console.log('✅ 개발 모드 인증 완료, 분석 실행 시작');
-                    
-                    // 분석 실행
-                    await executeAnalysis(analysisType);
-                    return;
-                }
-                
-                // 프로덕션 환경에서는 기존 인증 로직 사용
-                await waitForAuthSystem();
-                await waitForAuthentication();
-                
-                console.log('✅ 인증 완료, 분석 실행 시작');
-                await executeAnalysis(analysisType);
-                
-            } catch (error) {
-                console.error('❌ 인증 초기화 오류:', error);
-                showError('인증 초기화 중 오류가 발생했습니다: ' + error.message);
-            }
-        }
+    renderActivityChart() {
+        const canvas = document.getElementById('activity-chart');
+        if (!canvas || !this.currentData) return;
 
-        // 개발 모드용 UI 업데이트
-        function updateDevAuthUI() {
-            const authInfo = document.getElementById('auth-info');
-            const loginBtn = document.getElementById('login-btn');
-            const logoutBtn = document.getElementById('logout-btn');
-            
-            if (authInfo) {
-                authInfo.innerHTML = `
-                    <div class="d-flex align-items-center">
-                        <img src="https://via.placeholder.com/32" 
-                             class="rounded-circle me-2" width="32" height="32">
-                        <span class="text-white">Development User</span>
-                        <small class="text-warning ms-2">[DEV]</small>
-                    </div>
-                `;
-            }
-            if (loginBtn) loginBtn.style.display = 'none';
-            if (logoutBtn) logoutBtn.style.display = 'inline-block';
-        }
-
-        // Auth 시스템 로드 대기
-        function waitForAuthSystem() {
-            return new Promise((resolve, reject) => {
-                let attempts = 0;
-                const maxAttempts = 50; // 5초 대기
-                
-                const checkAuth = () => {
-                    attempts++;
-                    
-                    if (typeof protectPage === 'function' && typeof getAuthToken === 'function') {
-                        console.log('✅ Auth 시스템 로드 완료');
-                        resolve();
-                    } else if (attempts >= maxAttempts) {
-                        reject(new Error('Auth 시스템 로드 타임아웃'));
-                    } else {
-                        setTimeout(checkAuth, 100);
-                    }
-                };
-                
-                checkAuth();
-            });
-        }
-
-        // 인증 완료 대기 (원래 단순한 버전)
-        function waitForAuthentication() {
-            return new Promise((resolve, reject) => {
-                console.log('🔒 Firebase Auth 상태 감지 시작...');
-                
-                let timeoutHandle = null;
-                let authStateListener = null;
-                
-                // 15초 타임아웃 설정
-                timeoutHandle = setTimeout(() => {
-                    if (authStateListener) {
-                        authStateListener(); // unsubscribe
-                    }
-                    reject(new Error('인증 대기 시간이 초과되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.'));
-                }, 15000);
-                
-                // Firebase Auth 상태 변화 직접 감지
-                const checkFirebaseAuth = () => {
-                    if (typeof firebase !== 'undefined' && firebase.auth) {
-                        console.log('🔒 Firebase Auth 객체 확인 완료');
-                        
-                        // Auth 상태 변화 리스너 등록
-                        authStateListener = firebase.auth().onAuthStateChanged((user) => {
-                            console.log('🔒 Auth 상태 변화 감지:', user ? user.email : 'null');
-                            
-                            if (user && user.email === 'sandscasino8888@gmail.com') {
-                                console.log('✅ 올바른 사용자 인증 확인:', user.email);
-                                
-                                // 토큰 확인
-                                user.getIdToken().then((token) => {
-                                    if (token) {
-                                        console.log('✅ 인증 토큰 확인 완료');
-                                        isAuthenticated = true;
-                                        
-                                        // 정리
-                                        if (timeoutHandle) clearTimeout(timeoutHandle);
-                                        if (authStateListener) authStateListener();
-                                        
-                                        resolve();
-                                    } else {
-                                        console.log('❌ 토큰 확인 실패');
-                                    }
-                                }).catch((error) => {
-                                    console.error('❌ 토큰 획득 오류:', error);
-                                });
-                            } else if (user) {
-                                console.log('❌ 허용되지 않은 사용자:', user.email);
-                                
-                                // 정리
-                                if (timeoutHandle) clearTimeout(timeoutHandle);
-                                if (authStateListener) authStateListener();
-                                
-                                reject(new Error('접근 권한이 없습니다. 올바른 계정으로 로그인해주세요.'));
-                            }
-                        });
-                    } else {
-                        console.log('⏳ Firebase Auth 객체 대기 중...');
-                        setTimeout(checkFirebaseAuth, 200);
-                    }
-                };
-                
-                checkFirebaseAuth();
-            });
-        }
-
-        // 분석 실행 함수
-        async function executeAnalysis(type) {
-            console.log('🎯 분석 실행:', type);
-
-            try {
-                switch (type) {
-                    case 'high-activity-dormant':
-                        await executeHighActivityDormantAnalysis(1); // 첫 페이지부터 시작
-                        break;
-                    default:
-                        throw new Error(`지원하지 않는 분석 타입: ${type}`);
-                }
-            } catch (error) {
-                console.error('❌ 분석 실행 오류:', error);
-                showError(error.message);
-            }
-        }
-
-        // 페이지네이션 상태 (전체)
-        let currentPage = 1;
-        let totalPages = 1;
-        let totalCount = 0;
-        const itemsPerPage = 50;
-
-        // 등급별 페이지네이션 상태
-        let gradePages = {
-            premium: 1,
-            high: 1,
-            medium: 1,
-            basic: 1
+        const data = this.currentData.data;
+        
+        // 휴면일수별 분포
+        const dormantRanges = {
+            '30-60일': 0,
+            '61-120일': 0,
+            '121-180일': 0,
+            '181-365일': 0,
+            '365일+': 0
         };
 
-        let gradeStats = {}; // 백엔드에서 받아온 등급별 통계
-
-        // 고활동 휴면 사용자 분석 실행 (페이지네이션 추가)
-        async function executeHighActivityDormantAnalysis(page = 1) {
-            try {
-                currentPage = page;
-                const params = new URLSearchParams({
-                    page: page,
-                    limit: itemsPerPage
-                });
-                
-                const data = await apiCall(`getHighActivityDormantUsers?${params}`, true);
-                analysisData = data;
-                
-                // 페이지 정보 업데이트
-                totalCount = data.pagination?.totalCount || data.summary?.totalUsers || 0;
-                totalPages = data.pagination?.totalPages || Math.ceil(totalCount / itemsPerPage);
-                
-                console.log(`📄 페이지 ${page}/${totalPages}, 총 ${totalCount}명`);
-
-                // 결과 화면 구성
-                setupHighActivityDormantResults(data);
-                showResults();
-
-            } catch (error) {
-                throw new Error(`고활동 휴면 사용자 분석 실패: ${error.message}`);
-            }
-        }
-
-        // 고활동 휴면 사용자 결과 화면 구성
-        function setupHighActivityDormantResults(data) {
-            // 등급별 통계 저장
-            gradeStats = data.gradeStats || {};
-            
-            // 분석 정보 설정
-            document.getElementById('analysis-title').textContent = '고활동 휴면 사용자 분석';
-            document.getElementById('analysis-subtitle').textContent = 
-                `분석 완료: ${new Date().toLocaleString('ko-KR')} | 쿼리 시간: ${data.queryTime}`;
-
-            // 분석 기준 설정
-            const criteriaContent = document.getElementById('criteria-content');
-            criteriaContent.innerHTML = `
-                <div class="criteria-item">• ${data.criteria.activeMonthsRequired}</div>
-                <div class="criteria-item">• ${data.criteria.dormantPeriod}</div>
-            `;
-
-            // 요약 통계 설정 (전체 데이터 기반)
-            const summaryStats = document.getElementById('summary-stats');
-            summaryStats.innerHTML = `
-                <div class="stat-box">
-                    <div class="stat-value">${data.summary.totalUsers.toLocaleString()}</div>
-                    <div class="stat-label">총 대상 사용자</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${data.summary.avgActiveMonths}</div>
-                    <div class="stat-label">평균 활동 개월수</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${data.summary.avgDaysSinceLastGame}</div>
-                    <div class="stat-label">평균 휴면 일수</div>
-                </div>
-                <div class="stat-box">
-                    <div class="stat-value">${(data.summary.totalNetBet || 0).toLocaleString()}원</div>
-                    <div class="stat-label">총 유효 베팅액</div>
-                </div>
-            `;
-
-            // 그룹별 결과 설정
-            const resultsContainer = document.getElementById('analysis-results');
-            resultsContainer.innerHTML = '';
-
-            const groups = [
-                { key: 'premium', name: 'Premium 등급', color: '#ff6b6b', icon: 'crown' },
-                { key: 'high', name: 'High 등급', color: '#4ecdc4', icon: 'star' },
-                { key: 'medium', name: 'Medium 등급', color: '#45b7b8', icon: 'heart' },
-                { key: 'basic', name: 'Basic 등급', color: '#96ceb4', icon: 'user' }
-            ];
-
-            groups.forEach(group => {
-                const groupData = data.groupedResults[group.key];
-                if (groupData && groupData.totalCount > 0) {
-                    createGroupSection(group, groupData, resultsContainer);
-                }
-            });
-
-            // 전체 페이지네이션 UI 제거 (등급별 페이지네이션으로 대체)
-            // createPaginationUI(resultsContainer);
-        }
-
-        // 페이지네이션 UI 생성
-        function createPaginationUI(container) {
-            // 페이지가 1개 이하면 페이지네이션 표시하지 않음
-            if (totalPages <= 1) return;
-
-            const paginationSection = document.createElement('div');
-            paginationSection.className = 'result-card pagination-section';
-            
-            paginationSection.innerHTML = `
-                <div class="pagination-info">
-                    <h4><i class="fas fa-list me-2"></i>페이지 정보</h4>
-                    <p>현재 페이지: <strong>${currentPage}</strong> / 총 <strong>${totalPages}</strong>페이지</p>
-                    <p>전체 대상자: <strong>${totalCount.toLocaleString()}명</strong> (페이지당 ${itemsPerPage}명)</p>
-                </div>
-                
-                <div class="pagination-controls">
-                    <button class="btn btn-pagination ${currentPage === 1 ? 'disabled' : ''}" 
-                            onclick="changePage(1)" ${currentPage === 1 ? 'disabled' : ''}>
-                        <i class="fas fa-angle-double-left"></i> 첫 페이지
-                    </button>
-                    
-                    <button class="btn btn-pagination ${currentPage === 1 ? 'disabled' : ''}" 
-                            onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
-                        <i class="fas fa-angle-left"></i> 이전
-                    </button>
-                    
-                    <div class="page-numbers">
-                        ${generatePageNumbers()}
-                    </div>
-                    
-                    <button class="btn btn-pagination ${currentPage === totalPages ? 'disabled' : ''}" 
-                            onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
-                        다음 <i class="fas fa-angle-right"></i>
-                    </button>
-                    
-                    <button class="btn btn-pagination ${currentPage === totalPages ? 'disabled' : ''}" 
-                            onclick="changePage(${totalPages})" ${currentPage === totalPages ? 'disabled' : ''}>
-                        마지막 페이지 <i class="fas fa-angle-double-right"></i>
-                    </button>
-                </div>
-            `;
-            
-            container.appendChild(paginationSection);
-        }
-
-        // 페이지 번호 생성
-        function generatePageNumbers() {
-            const maxVisiblePages = 5;
-            const pages = [];
-            
-            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-            
-            // 페이지 수가 부족하면 시작 페이지 조정
-            if (endPage - startPage + 1 < maxVisiblePages) {
-                startPage = Math.max(1, endPage - maxVisiblePages + 1);
-            }
-            
-            for (let i = startPage; i <= endPage; i++) {
-                const isActive = i === currentPage;
-                pages.push(`
-                    <button class="btn btn-page-number ${isActive ? 'active' : ''}" 
-                            onclick="changePage(${i})" ${isActive ? 'disabled' : ''}>
-                        ${i}
-                    </button>
-                `);
-            }
-            
-            return pages.join('');
-        }
-
-        // 등급별 페이지 변경
-        async function changeGradePage(gradeKey, page) {
-            const gradeInfo = gradeStats[gradeKey];
-            if (!gradeInfo || page < 1 || page > gradeInfo.totalPages || page === gradePages[gradeKey]) {
-                return;
-            }
-            
-            try {
-                // 로딩 표시
-                document.getElementById('loading-screen').style.display = 'block';
-                document.getElementById('result-screen').style.display = 'none';
-                
-                console.log(`📄 ${gradeKey} 등급 페이지 ${page}로 변경`);
-                
-                // 등급별 페이지 상태 업데이트
-                gradePages[gradeKey] = page;
-                
-                // 전체 데이터 다시 로드 (등급별 페이지 정보 반영)
-                await executeHighActivityDormantAnalysis(currentPage);
-                
-            } catch (error) {
-                console.error(`❌ ${gradeKey} 등급 페이지 변경 실패:`, error);
-                showError(`${gradeKey} 등급 페이지 변경 중 오류가 발생했습니다: ${error.message}`);
-            }
-        }
-
-        // 페이지 변경
-        async function changePage(page) {
-            if (page < 1 || page > totalPages || page === currentPage) return;
-            
-            try {
-                // 로딩 표시
-                document.getElementById('loading-screen').style.display = 'block';
-                document.getElementById('result-screen').style.display = 'none';
-                
-                // 페이지 변경
-                await executeHighActivityDormantAnalysis(page);
-                
-            } catch (error) {
-                console.error('❌ 페이지 변경 실패:', error);
-                showError('페이지 변경 중 오류가 발생했습니다: ' + error.message);
-            }
-        }
-
-        // 그룹 섹션 생성 (등급별 페이지네이션 포함)
-        function createGroupSection(group, groupData, container) {
-            const section = document.createElement('div');
-            section.className = 'result-card group-section';
-            
-            // 현재 페이지와 전체 페이지 수 계산
-            const currentGradePage = gradePages[group.key] || 1;
-            const totalGradePage = groupData.totalPages || 1;
-            const totalGradeCount = groupData.totalCount || 0;
-            
-            section.innerHTML = `
-                <div class="group-header">
-                    <h4 class="group-title">
-                        <i class="fas fa-${group.icon} me-2" style="color: ${group.color};"></i>
-                        ${group.name}
-                    </h4>
-                    <div class="group-info">
-                        <span class="group-count">${groupData.count}명 표시</span>
-                        <span class="group-total">/ 전체 ${totalGradeCount.toLocaleString()}명</span>
-                    </div>
-                </div>
-                <div class="mb-3">
-                    <small class="text-muted">${groupData.criteria}</small>
-                </div>
-                
-                <!-- 등급별 페이지네이션 정보 -->
-                ${totalGradePage > 1 ? `
-                <div class="grade-pagination-info">
-                    <small class="text-info">
-                        <i class="fas fa-info-circle me-1"></i>
-                        페이지 ${currentGradePage}/${totalGradePage} (총 ${totalGradeCount}명 중 ${((currentGradePage-1) * itemsPerPage + 1)}-${Math.min(currentGradePage * itemsPerPage, totalGradeCount)}번째)
-                    </small>
-                </div>
-                ` : ''}
-                
-                <div class="users-table">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>사용자 ID</th>
-                                <th>활동 개월수</th>
-                                <th>휴면 일수</th>
-                                <th>총 게임일수</th>
-                                <th>총 유효배팅</th>
-                                <th>총 손익</th>
-                                <th>마지막 게임</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${groupData.users.map(user => `
-                                <tr>
-                                    <td><code>${user.userId}</code></td>
-                                    <td><span class="badge bg-primary">${user.active_months_count}개월</span></td>
-                                    <td><span class="badge bg-warning">${user.days_since_last_game}일</span></td>
-                                    <td>${user.total_game_days}일</td>
-                                    <td><strong>${(user.total_net_bet || 0).toLocaleString()}원</strong></td>
-                                    <td class="${(user.total_win_loss || 0) >= 0 ? 'text-success' : 'text-danger'}">
-                                        ${(user.total_win_loss || 0).toLocaleString()}원
-                                    </td>
-                                    <td>${new Date(user.last_game_date).toLocaleDateString('ko-KR')}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-                
-                <!-- 등급별 페이지네이션 버튼 -->
-                ${totalGradePage > 1 ? `
-                <div class="grade-pagination-controls">
-                    <button class="btn btn-sm btn-outline-primary ${currentGradePage === 1 ? 'disabled' : ''}" 
-                            onclick="changeGradePage('${group.key}', 1)" ${currentGradePage === 1 ? 'disabled' : ''}>
-                        <i class="fas fa-angle-double-left"></i>
-                    </button>
-                    
-                    <button class="btn btn-sm btn-outline-primary ${currentGradePage === 1 ? 'disabled' : ''}" 
-                            onclick="changeGradePage('${group.key}', ${currentGradePage - 1})" ${currentGradePage === 1 ? 'disabled' : ''}>
-                        <i class="fas fa-angle-left"></i>
-                    </button>
-                    
-                    <span class="mx-2">
-                        <strong>${currentGradePage}</strong> / ${totalGradePage}
-                    </span>
-                    
-                    <button class="btn btn-sm btn-outline-primary ${currentGradePage === totalGradePage ? 'disabled' : ''}" 
-                            onclick="changeGradePage('${group.key}', ${currentGradePage + 1})" ${currentGradePage === totalGradePage ? 'disabled' : ''}>
-                        <i class="fas fa-angle-right"></i>
-                    </button>
-                    
-                    <button class="btn btn-sm btn-outline-primary ${currentGradePage === totalGradePage ? 'disabled' : ''}" 
-                            onclick="changeGradePage('${group.key}', ${totalGradePage})" ${currentGradePage === totalGradePage ? 'disabled' : ''}>
-                        <i class="fas fa-angle-double-right"></i>
-                    </button>
-                </div>
-                ` : ''}
-            `;
-            
-            container.appendChild(section);
-        }
-
-        // API 호출 함수 (개발 모드 지원)
-        async function apiCall(endpoint, requireAuth = true, retries = 3) {
-            // 개발 환경에서는 로컬 URL 사용
-            const isLocalDev = window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
-            const baseUrl = isLocalDev 
-                ? 'http://127.0.0.1:9004/db888-67827/us-central1' 
-                : 'https://us-central1-db888-67827.cloudfunctions.net';
-            const url = `${baseUrl}/${endpoint}`;
-            let lastError = null;
-            
-            for (let attempt = 1; attempt <= retries; attempt++) {
-                try {
-                    console.log(`🔄 API 호출 시도 ${attempt}/${retries}: ${endpoint}`);
-                    
-                    const headers = {
-                        'Content-Type': 'application/json'
-                    };
-                    
-                    // 개발 모드에서는 인증 우회, 프로덕션에서만 인증 처리
-                    if (requireAuth && !isLocalDev) {
-                        // 인증 상태 재확인
-                        if (!isAuthenticated) {
-                            throw new Error('인증되지 않은 상태입니다');
-                        }
-                        
-                        // Firebase Auth에서 직접 토큰 획득
-                        const currentUser = firebase.auth().currentUser;
-                        if (!currentUser) {
-                            throw new Error('현재 사용자를 찾을 수 없습니다');
-                        }
-                        
-                        const token = await currentUser.getIdToken();
-                        if (!token) {
-                            throw new Error('인증 토큰을 가져올 수 없습니다');
-                        }
-                        
-                        headers['Authorization'] = `Bearer ${token}`;
-                        console.log('✅ Firebase Auth 토큰 설정 완료');
-                    } else if (isLocalDev) {
-                        console.log('🧪 개발 모드: 인증 우회하여 API 호출');
-                    }
-                    
-                    const response = await fetch(url, { headers });
-                    
-                    if (!response.ok) {
-                        const errorText = await response.text();
-                        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
-                    }
-                    
-                    const result = await response.json();
-                    console.log(`✅ API 호출 성공: ${endpoint}`);
-                    return result;
-                    
-                } catch (error) {
-                    lastError = error;
-                    console.error(`❌ API 호출 실패 (시도 ${attempt}/${retries}):`, error.message);
-                    
-                    // 인증 에러인 경우 토큰 재획득 시도
-                    if (error.message.includes('토큰') && attempt < retries) {
-                        console.log('🔄 토큰 재획득 대기 중...');
-                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                        continue;
-                    }
-                    
-                    // 마지막 시도가 아니면 잠시 대기 후 재시도
-                    if (attempt < retries) {
-                        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-                    }
-                }
-            }
-            
-            throw lastError;
-        }
-
-        // CSV 다운로드 함수
-        function downloadCSV() {
-            if (!analysisData) {
-                alert('다운로드할 데이터가 없습니다.');
-                return;
-            }
-
-            try {
-                // 모든 사용자 데이터 수집
-                const allUsers = [];
-                Object.keys(analysisData.groupedResults).forEach(groupKey => {
-                    const group = analysisData.groupedResults[groupKey];
-                    if (group.users) {
-                        group.users.forEach(user => {
-                            allUsers.push({
-                                ...user,
-                                group: groupKey.toUpperCase()
-                            });
-                        });
-                    }
-                });
-
-                // CSV 헤더
-                const headers = [
-                    '그룹', '사용자ID', '활동개월수', '휴면일수', '총게임일수', 
-                    '총유효배팅', '총손익', '평균일일배팅', '첫게임일', '마지막게임일', '게임기간일수'
-                ];
-
-                // CSV 데이터 생성
-                const csvContent = [
-                    headers.join(','),
-                    ...allUsers.map(user => [
-                        user.group,
-                        user.userId,
-                        user.active_months_count,
-                        user.days_since_last_game,
-                        user.total_game_days,
-                        user.total_net_bet || 0,
-                        user.total_win_loss || 0,
-                        user.avg_daily_bet || 0,
-                        user.first_game_date,
-                        user.last_game_date,
-                        user.game_period_days || 0
-                    ].join(','))
-                ].join('\n');
-
-                // 파일 다운로드
-                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                const url = URL.createObjectURL(blob);
-                link.setAttribute('href', url);
-                link.setAttribute('download', `고활동_휴면사용자_분석_${new Date().toISOString().split('T')[0]}.csv`);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                console.log('✅ CSV 다운로드 완료:', allUsers.length, '명');
-
-            } catch (error) {
-                console.error('❌ CSV 다운로드 오류:', error);
-                alert('CSV 다운로드 중 오류가 발생했습니다: ' + error.message);
-            }
-        }
-
-        // 화면 전환 함수들
-        function showResults() {
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('error-screen').style.display = 'none';
-            document.getElementById('result-screen').style.display = 'block';
-        }
-
-        function showError(message) {
-            document.getElementById('error-message').textContent = message;
-            document.getElementById('loading-screen').style.display = 'none';
-            document.getElementById('result-screen').style.display = 'none';
-            document.getElementById('error-screen').style.display = 'block';
-            
-            // 재시도 버튼 추가 (인증 에러인 경우)
-            const errorScreen = document.getElementById('error-screen');
-            if (message.includes('인증') || message.includes('토큰')) {
-                const existingRetryBtn = errorScreen.querySelector('.btn-retry');
-                if (!existingRetryBtn) {
-                    const retryBtn = document.createElement('button');
-                    retryBtn.className = 'btn btn-warning mt-2 btn-retry';
-                    retryBtn.innerHTML = '<i class="fas fa-redo me-2"></i>다시 시도';
-                    retryBtn.onclick = retryAnalysis;
-                    
-                    const backBtn = errorScreen.querySelector('.btn-back');
-                    backBtn.parentNode.insertBefore(retryBtn, backBtn);
-                }
-            }
-        }
-
-        // 분석 재시도
-        async function retryAnalysis() {
-            console.log('🔄 분석 재시도 시작');
-            
-            // 에러 화면 숨기고 로딩 화면 표시
-            document.getElementById('error-screen').style.display = 'none';
-            document.getElementById('loading-screen').style.display = 'block';
-            
-            // 인증 상태 재설정
-            isAuthenticated = false;
-            
-            try {
-                // 인증 재초기화
-                await initializeAuthentication();
-            } catch (error) {
-                console.error('❌ 재시도 실패:', error);
-                showError('재시도 중 오류가 발생했습니다: ' + error.message);
-            }
-        }
-
-        function goBack() {
-            window.location.href = '/query-center.html';
-        }
-
-        // 페이지 로드 완료
-        window.addEventListener('load', function() {
-            console.log('🎯 DB3 분석 결과 페이지 로드 완료');
+        data.forEach(user => {
+            const days = user.days_since_last_game || 0;
+            if (days <= 60) dormantRanges['30-60일']++;
+            else if (days <= 120) dormantRanges['61-120일']++;
+            else if (days <= 180) dormantRanges['121-180일']++;
+            else if (days <= 365) dormantRanges['181-365일']++;
+            else dormantRanges['365일+']++;
         });
+
+        // 기존 차트 제거
+        if (this.charts.activity) {
+            this.charts.activity.destroy();
+        }
+
+        this.charts.activity = new Chart(canvas, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(dormantRanges),
+                datasets: [{
+                    label: '사용자 수',
+                    data: Object.values(dormantRanges),
+                    backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                    borderColor: 'rgba(102, 126, 234, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+    }
+
+    getFilteredData() {
+        if (!this.currentData || !this.currentData.data) return [];
+        
+        let filtered = this.currentData.data;
+        
+        if (this.tierFilter) {
+            filtered = filtered.filter(user => user.tier === this.tierFilter);
+        }
+        
+        return filtered;
+    }
+
+    renderTable() {
+        const tbody = document.querySelector('#results-table tbody');
+        if (!tbody) return;
+
+        const filteredData = this.getFilteredData();
+        const startIndex = (this.currentPage - 1) * this.itemsPerPage;
+        const endIndex = startIndex + this.itemsPerPage;
+        const pageData = filteredData.slice(startIndex, endIndex);
+
+        tbody.innerHTML = pageData.map(user => {
+            // 대표ID만 보기 모드일 때는 그룹 총 유효배팅 사용, 아니면 개별 유효배팅 사용
+            const displayNetBet = this.representativeOnly 
+                ? (user.group_total_netbet || user.individual_netbet)
+                : user.individual_netbet;
+            
+            // 게임 시작일: 그룹이 있으면 그룹 첫 게임일, 없으면 개별 첫 게임일
+            const gameStartDate = user.group_first_game_date || user.first_game_date;
+            
+            return `
+                <tr>
+                    <td>${user.userId || '-'}</td>
+                    <td>
+                        <strong class="text-primary">
+                            ${user.display_representative || user.userId}
+                        </strong>
+                    </td>
+                    <td><span class="tier-badge tier-${user.tier?.toLowerCase() || 'basic'}">${this.getTierAbbreviation(user.tier)}</span></td>
+                    <td class="${this.getAmountClass(displayNetBet)}">${this.formatAmount(displayNetBet)}</td>
+                    <td>${user.total_game_days || 0}</td>
+                    <td class="${this.getAmountClass(user.individual_winloss)}">${this.formatAmount(user.individual_winloss)}</td>
+                    <td>${gameStartDate || '-'}</td>
+                    <td>${user.last_game_date || '-'}</td>
+                    <td>${user.days_since_last_game || 0}일</td>
+                    <td><span class="tier-badge status-dormant">휴면</span></td>
+                    <td>
+                        <span class="badge ${user.event_count > 0 ? 'bg-info' : 'bg-light text-dark'}">
+                            ${user.event_count || 0}회
+                        </span>
+                    </td>
+                    <td>
+                        ${user.phone_number ? 
+                            `<span class="contact-info phone-available" title="${user.phone_memo || ''}">
+                                <i class="fas fa-phone text-success me-1"></i>${this.formatPhoneNumber(user.phone_number)}
+                            </span>` : 
+                            '<span class="contact-info contact-unavailable"><i class="fas fa-phone-slash text-muted"></i> 없음</span>'
+                        }
+                    </td>
+                    <td>
+                        ${user.wechat_id ? 
+                            `<span class="contact-info wechat-available">
+                                <i class="fab fa-weixin text-success me-1"></i>${user.wechat_id}
+                            </span>` : 
+                            '<span class="contact-info contact-unavailable"><i class="fab fa-weixin text-muted"></i> 없음</span>'
+                        }
+                    </td>
+                    <td>
+                        <span class="contact-status ${user.contact_availability?.toLowerCase() || 'none'}">
+                            ${this.getContactStatusBadge(user.contact_availability)}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    renderPagination() {
+        const container = document.getElementById('pagination');
+        if (!container) return;
+
+        const filteredData = this.getFilteredData();
+        const totalPages = Math.ceil(filteredData.length / this.itemsPerPage);
+
+        if (totalPages <= 1) {
+            container.innerHTML = '';
+            return;
+        }
+
+        let paginationHTML = '';
+
+        // 이전 버튼
+        paginationHTML += `
+            <li class="page-item ${this.currentPage === 1 ? 'disabled' : ''}">
+                <a class="page-link" href="#" data-page="${this.currentPage - 1}">이전</a>
+            </li>
+        `;
+
+        // 페이지 번호들
+        const startPage = Math.max(1, this.currentPage - 2);
+        const endPage = Math.min(totalPages, this.currentPage + 2);
+
+        for (let i = startPage; i <= endPage; i++) {
+            paginationHTML += `
+                <li class="page-item ${i === this.currentPage ? 'active' : ''}">
+                    <a class="page-link" href="#" data-page="${i}">${i}</a>
+                </li>
+            `;
+        }
+
+        // 다음 버튼
+        paginationHTML += `
+            <li class="page-item ${this.currentPage === totalPages ? 'disabled' : ''}">
+                <a class="page-link" href="#" data-page="${this.currentPage + 1}">다음</a>
+            </li>
+        `;
+
+        container.innerHTML = paginationHTML;
+
+        // 페이지네이션 이벤트 리스너
+        container.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (e.target.tagName === 'A' && !e.target.parentElement.classList.contains('disabled')) {
+                const page = parseInt(e.target.dataset.page);
+                if (page && page !== this.currentPage) {
+                    this.currentPage = page;
+                    this.renderTable();
+                    this.renderPagination();
+                }
+            }
+        });
+    }
+
+    renderMarketingSuggestions() {
+        const container = document.getElementById('marketing-suggestions');
+        if (!container || !this.currentData) return;
+
+        const data = this.currentData.data;
+        const summary = this.currentData.summary || {};
+        
+        const premiumUsers = data.filter(user => user.tier === 'Premium');
+        const highUsers = data.filter(user => user.tier === 'High');
+        const representativeUsers = data.filter(user => user.is_representative === 'Y');
+        const connectedUsers = data.filter(user => user.is_representative === 'N');
+        
+        const totalGroupNetBet = data.reduce((sum, user) => sum + (user.group_total_netbet || user.individual_netbet || 0), 0);
+        const avgGroupNetBet = totalGroupNetBet / data.length;
+
+        const suggestions = [
+            {
+                title: '🎯 다중계정 그룹 분석 결과 (그룹 전체 유효배팅 기준)',
+                content: `<strong>그룹 기반 등급 분류:</strong><br>
+                • Premium (${premiumUsers.length}명): 그룹 전체 유효배팅 500만원 이상 + 게임일수 200일 이상<br>
+                • High (${data.filter(u => u.tier === 'High').length}명): 그룹 전체 유효배팅 130만원 이상 + 게임일수 120일 이상<br>
+                • Medium (${data.filter(u => u.tier === 'Medium').length}명): 그룹 전체 유효배팅 20만원 이상 + 게임일수 80일 이상<br>
+                • Basic (${data.filter(u => u.tier === 'Basic').length}명): 위 조건에 해당하지 않는 사용자<br><br>
+                <strong>계정 분포:</strong> 대표ID ${representativeUsers.length}명, 연결ID ${connectedUsers.length}명`
+            },
+            {
+                title: '⚠️ 중요: 진짜 휴면 vs 가짜 휴면 구분',
+                content: `<strong>마케팅 전 필수 확인사항:</strong><br>
+                • <span class="badge bg-primary">대표ID</span> 휴면: 진짜 휴면 사용자 → 재활성화 마케팅 실행<br>
+                • <span class="badge bg-secondary">연결ID</span> 휴면: 다른 계정으로 활동 중일 가능성 → 마케팅 주의<br><br>
+                현재 분석된 ${data.length}명 중 ${representativeUsers.length}명이 대표ID, ${connectedUsers.length}명이 연결ID입니다. 연결ID는 같은 그룹의 대표ID 활동 여부를 확인 후 마케팅 진행을 권장합니다.`
+            },
+            {
+                title: '💎 그룹 전체 가치 기반 VIP 마케팅',
+                content: `${premiumUsers.length}명의 프리미엄 등급 사용자들의 그룹 전체 평균 유효배팅은 ${Math.round(avgGroupNetBet).toLocaleString()}원입니다. 개별 계정이 아닌 <strong>그룹 전체 가치</strong>를 기준으로 VIP 서비스를 제공하세요. 다중 계정을 운영하는 고가치 사용자일수록 더 큰 잠재 가치를 가지고 있습니다.`
+            },
+            {
+                title: '📊 효과적인 단계별 마케팅 전략',
+                content: `<strong>1단계:</strong> 대표ID 우선 접촉 (${representativeUsers.length}명)<br>
+                <strong>2단계:</strong> 그룹 전체 가치 기준 맞춤 혜택 제공<br>
+                <strong>3단계:</strong> 연결ID는 대표ID 활동 확인 후 신중한 접근<br>
+                <strong>4단계:</strong> 그룹 통합 관리로 중복 마케팅 방지<br><br>
+                예상 복귀율 10% 기준으로도 약 ${Math.round(totalGroupNetBet * 0.1 / 100000000)}억원의 매출 기여가 가능합니다.`
+            }
+        ];
+
+        container.innerHTML = suggestions.map(suggestion => `
+            <div class="marketing-suggestion">
+                <h6>${suggestion.title}</h6>
+                <p>${suggestion.content}</p>
+            </div>
+        `).join('');
+    }
+
+    getUserTier(user) {
+        // API에서 이미 계산된 tier 사용
+        return user.tier || 'Basic';
+    }
+
+    getAmountClass(amount) {
+        if (!amount || amount === 0) return 'amount-neutral';
+        return amount > 0 ? 'amount-positive' : 'amount-negative';
+    }
+
+    formatAmount(amount) {
+        if (!amount || amount === 0) return '0원';
+        return Math.round(amount).toLocaleString() + '원';
+    }
+
+    downloadCSV() {
+        if (!this.currentData || !this.currentData.data) {
+            alert('다운로드할 데이터가 없습니다.');
+            return;
+        }
+
+        const data = this.getFilteredData();
+        if (!data || data.length === 0) {
+            alert('필터링된 데이터가 없습니다.');
+            return;
+        }
+
+        // CSV 헤더 (영문명으로 변경하여 호환성 향상)
+        const headers = [
+            'user_id', 'account_type', 'representative_id', 'tier', 
+            'net_bet', 'total_game_days', 'win_loss', 'first_game_date', 
+            'last_game_date', 'dormant_days', 'status', 'event_count'
+        ];
+        
+        // 한글 헤더 (사용자가 보기 편한 형태)
+        const koreanHeaders = [
+            '사용자ID', '대표ID', '등급', 
+            '유효배팅', '총게임일수', '총손익', '게임시작일', 
+            '마지막게임일', '휴면일수', '활동상태', '이벤트지급횟수',
+            '전화번호', '위챗ID', '연락처상태', '전화메모', '추가메모'
+        ];
+        
+        // CSV 안전한 텍스트 처리 함수
+        const escapeCSV = (text) => {
+            if (text == null || text === undefined) return '';
+            const str = String(text);
+            // 특수문자가 포함된 경우 따옴표로 감싸기
+            if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r') || str.includes(';')) {
+                return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+        };
+
+        // 숫자 포맷팅 (Excel 호환)
+        const formatNumber = (num) => {
+            if (num == null || num === '' || num === undefined) return '0';
+            const number = Number(num);
+            return isNaN(number) ? '0' : String(Math.round(number));
+        };
+
+        // 날짜 포맷팅
+        const formatDate = (date) => {
+            if (!date) return '';
+            return String(date).replace(/,/g, '');
+        };
+        
+        try {
+            // CSV 데이터 생성
+            const csvRows = [
+                koreanHeaders.map(escapeCSV).join(','), // 한글 헤더 사용
+                ...data.map((user, index) => {
+                    try {
+                        // 대표ID만 보기 모드일 때는 그룹 총 유효배팅 사용
+                        const displayNetBet = this.representativeOnly 
+                            ? (user.group_total_netbet || user.individual_netbet || 0)
+                            : (user.individual_netbet || 0);
+                        
+                        // 게임 시작일: 그룹이 있으면 그룹 첫 게임일
+                        const gameStartDate = user.group_first_game_date || user.first_game_date || '';
+                        
+                        // 등급 축약 (P, H, M, B)
+                        const tierAbbr = this.getTierAbbreviation(user.tier);
+                        
+                        const row = [
+                            escapeCSV(user.userId || ''),
+                            escapeCSV(user.display_representative || user.userId || ''),
+                            escapeCSV(tierAbbr),
+                            formatNumber(displayNetBet),
+                            formatNumber(user.total_game_days || 0),
+                            formatNumber(user.individual_winloss || 0),
+                            formatDate(gameStartDate),
+                            formatDate(user.last_game_date || ''),
+                            formatNumber(user.days_since_last_game || 0),
+                            escapeCSV('휴면'),
+                            formatNumber(user.event_count || 0),
+                            escapeCSV(user.phone_number || ''),
+                            escapeCSV(user.wechat_id || ''),
+                            escapeCSV(user.contact_availability || 'None'),
+                            escapeCSV(user.phone_memo || ''),
+                            escapeCSV(user.additional_note || '')
+                        ];
+                        
+                        return row.join(',');
+                    } catch (rowError) {
+                        console.error(`Row ${index} 처리 오류:`, rowError, user);
+                        return ''; // 오류 발생 시 빈 행
+                    }
+                })
+            ].filter(row => row !== ''); // 빈 행 제거
+
+            const csvContent = csvRows.join('\n');
+            
+            // Blob 생성 (UTF-8 BOM 포함)
+            const blob = new Blob(['\uFEFF' + csvContent], { 
+                type: 'text/csv;charset=utf-8;' 
+            });
+            
+            // 파일명 생성 (현재 날짜 포함)
+            const today = new Date();
+            const dateStr = today.toISOString().split('T')[0];
+            const timeStr = today.toTimeString().split(' ')[0].replace(/:/g, '');
+            const filename = `고가치휴면사용자분석_${dateStr}_${timeStr}.csv`;
+            
+            // 다운로드 실행
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+            
+            // 성공 메시지 및 디버깅 정보
+            console.log('✅ CSV 다운로드 성공:', {
+                filename: filename,
+                totalRows: csvRows.length,
+                dataRows: csvRows.length - 1, // 헤더 제외
+                headers: koreanHeaders,
+                sampleData: data.slice(0, 3).map(user => ({
+                    userId: user.userId,
+                    tier: user.tier,
+                    netBet: this.representativeOnly ? (user.group_total_netbet || user.individual_netbet) : user.individual_netbet,
+                    eventCount: user.event_count
+                }))
+            });
+            
+            // 사용자에게 성공 알림
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-success alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `
+                <strong>✅ CSV 다운로드 완료!</strong><br>
+                파일명: ${filename}<br>
+                총 ${csvRows.length - 1}건의 데이터가 포함되었습니다.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.body.appendChild(alert);
+            
+            // 3초 후 자동 제거
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.parentNode.removeChild(alert);
+                }
+            }, 3000);
+            
+        } catch (error) {
+            console.error('❌ CSV 생성 오류:', error);
+            alert(`CSV 파일 생성 중 오류가 발생했습니다: ${error.message}`);
+        }
+    }
+
+    // 연락처 관련 헬퍼 함수들
+    formatPhoneNumber(phone) {
+        if (!phone) return '-';
+        
+        // 전화번호 포맷팅 (예: 010-1234-5678)
+        const cleaned = phone.replace(/\D/g, '');
+        if (cleaned.length === 11) {
+            return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7)}`;
+        } else if (cleaned.length === 10) {
+            return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 6)}-${cleaned.slice(6)}`;
+        }
+        return phone; // 원본 반환
+    }
+
+    getContactStatusBadge(status) {
+        switch (status) {
+            case 'Both':
+                return '<i class="fas fa-check-double text-success me-1"></i><span class="badge bg-success">전화+위챗</span>';
+            case 'Phone':
+                return '<i class="fas fa-phone text-primary me-1"></i><span class="badge bg-primary">전화만</span>';
+            case 'WeChat':
+                return '<i class="fab fa-weixin text-info me-1"></i><span class="badge bg-info">위챗만</span>';
+            case 'None':
+            default:
+                return '<i class="fas fa-exclamation-triangle text-warning me-1"></i><span class="badge bg-warning text-dark">연락처 없음</span>';
+        }
+    }
+
+    // 등급 축약 함수 (공간 절약용)
+    getTierAbbreviation(tier) {
+        switch (tier) {
+            case 'Premium': return 'P';
+            case 'High': return 'H';
+            case 'Medium': return 'M';
+            case 'Basic': return 'B';
+            default: return 'B';
+        }
+    }
+}
+
+// 페이지 로드 시 초기화
+const analysisManager = new AnalysisResultManager();

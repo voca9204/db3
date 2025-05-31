@@ -24,6 +24,7 @@
 - 사용자 식별이 필요한 조인 쿼리에서는 내부적으로 `id`를 사용할 수 있으나, 최종 결과에는 포함하지 마세요.
 - CSV 파일이나 보고서를 생성할 때도 위 규칙을 준수하세요.
 - 금액 데이터를 표시할 때는 ROUND() 함수를 사용하여 소수점 이하를 반올림하세요.
+- **다중 계정 보고서**: 그룹ID 대신 **대표ID(대표 계정의 userId)**를 표시하여 실용성을 높이세요.
 
 ## 🔑 중요: 대표ID와 연결ID 관계
 
@@ -35,6 +36,25 @@
 | player | int | 연결ID (개별 플레이어 계정 ID) |
 | guild | char(32) | 대표ID (그룹 식별자 - 해시값) |
 | createdAt | timestamp | 그룹 가입 시점 |
+
+### 💎 핵심: 다중 계정 분석에 필수 변수들 (2025-05-31 추가)
+
+다음 변수들은 다중 계정 관리 및 분석에서 반드시 고려해야 하는 핵심 요소입니다:
+
+| 변수명 | 설명 | 중요도 |
+|--------|------|--------|
+| **그룹ID** | 계정들을 묶는 그룹 식별자 (guild 값과 동일) | ⭐⭐⭐ |
+| **대표ID** | 그룹 내 가장 최근 게임기록을 가진 계정 | ⭐⭐⭐ |
+| **대표ID여부** | 현재 계정이 해당 그룹의 대표ID인지 여부 | ⭐⭐⭐ |
+| **개별 유효배팅** | 해당 계정만의 유효배팅 금액 | ⭐⭐⭐ |
+| **그룹 총 유효배팅** | 연결된 모든 계정의 유효배팅 합계 | ⭐⭐⭐ |
+
+### 🎯 다중 계정 분석 시 주의사항
+- **중복 집계 방지**: 그룹 총 유효배팅으로 분석하여 동일 사용자 중복 계산 방지
+- **대표ID 기준**: 마케팅 타겟팅 시 대표ID만 선택하여 중복 연락 방지
+- **그룹 단위 분석**: 개별 계정이 아닌 그룹 단위로 사용자 가치 평가
+- **최신 활동 기준**: 대표ID는 가장 최근 게임기록 계정으로 선정
+- **📋 보고서 표시**: 그룹ID(해시값) 대신 **대표ID(실제 계정명)**를 표시하여 실용성 극대화
 
 ### 실제 데이터 현황 (2025-05-26 검증)
 - **총 플레이어 수**: 2,952명
@@ -52,6 +72,8 @@
 | status | tinyint | 활성 상태 (0: 활성, 1: 제한, 8: 특별관리) |
 | adjustType | tinyint | 마량 조정 타입 (RewardAdjustTypes 참조) |
 | flowFeatures | tinyint | 자금 흐름 특성 (PlayerFlowFeatures 참조) |
+| phoneName | varchar | 전화 관련 메모 (통화 시간, 선호도 등) |
+| note | text | 추가 메모 (고객 특성, 주의사항 등) |
 
 ### 2. game_scores 테이블 (게임 활동 데이터)
 | 변수명 | 타입 | 설명 |
@@ -80,6 +102,15 @@
 | reward | decimal(8,2) | 이벤트 보상 금액 |
 | status | tinyint | 프로모션 상태 (PromotionPlayerStatus 참조) |
 | appliedAt | timestamp | 실제 지급 시점 (NULL: 미지급, 값: 지급완료) |
+
+### 5. player_contacts 테이블 (연락처 정보) - 2025-05-31 추가
+| 변수명 | 타입 | 설명 |
+|--------|------|------|
+| player | int | 플레이어 ID (외래 키) |
+| contactType | varchar(20) | 연락처 유형 ('phone', 'wechat') |
+| contact | varchar(100) | 실제 연락처 정보 (전화번호 또는 위챗ID) |
+| createdAt | timestamp | 연락처 등록 시점 |
+| updatedAt | timestamp | 연락처 수정 시점 |
 
 ## 🎪 Enum 정의 (C# 기반 완전 정의)
 
@@ -122,21 +153,95 @@
 2: Flexible - 유연한 게임 (조건부 유효배팅)
 ```
 
+### ContactTypes (player_contacts.contactType) - 2025-05-31 추가
+```
+phone - 전화번호
+wechat - 위챗 ID
+```
+
+### ContactAvailability (계산되는 값) - 2025-05-31 추가
+```
+Both - 전화번호와 위챗 모두 보유
+Phone - 전화번호만 보유
+WeChat - 위챗만 보유
+None - 연락처 정보 없음
+```
+
 ## 🔍 핵심 분석 쿼리 패턴
 
-### 1. 다중 계정 통합 분석
+### 1. 다중 계정 통합 분석 (대표ID 표시)
 ```sql
--- 대표ID별 연결ID 분석
+-- 그룹별 대표ID와 총 유효배팅 분석 (보고서용)
 SELECT 
-    pg.guild as 대표ID,
-    COUNT(*) as 연결ID_수,
-    GROUP_CONCAT(p.userId ORDER BY p.userId SEPARATOR ', ') as 연결된_계정들
+    rep.userId as 대표ID,
+    pg.guild as 그룹ID,
+    COUNT(DISTINCT pg.player) as 연결ID_수,
+    ROUND(SUM(gs.netBet)) as 그룹_총유효배팅,
+    ROUND(SUM(CASE WHEN gs.userId = rep.userId THEN gs.netBet ELSE 0 END)) as 대표ID_개별배팅,
+    GROUP_CONCAT(DISTINCT p.userId ORDER BY p.userId SEPARATOR ', ') as 연결된_계정들
 FROM player_guilds pg
+-- 대표ID 찾기 (가장 최근 게임기록 계정)
+JOIN (
+    SELECT pg1.guild, p1.userId, p1.id
+    FROM player_guilds pg1
+    JOIN players p1 ON pg1.player = p1.id
+    JOIN game_scores gs1 ON p1.userId = gs1.userId
+    WHERE (pg1.guild, gs1.gameDate) IN (
+        SELECT pg2.guild, MAX(gs2.gameDate)
+        FROM player_guilds pg2
+        JOIN players p2 ON pg2.player = p2.id
+        JOIN game_scores gs2 ON p2.userId = gs2.userId
+        GROUP BY pg2.guild
+    )
+) rep ON pg.guild = rep.guild
 JOIN players p ON pg.player = p.id
-GROUP BY pg.guild
+LEFT JOIN game_scores gs ON p.userId = gs.userId
+GROUP BY pg.guild, rep.userId
 HAVING 연결ID_수 > 1
-ORDER BY 연결ID_수 DESC;
+ORDER BY 그룹_총유효배팅 DESC;
 ```
+
+### 2. 다중 계정 고가치 휴면 사용자 분석
+```sql
+-- 대표ID 기준 고가치 휴면 사용자 (마케팅용)
+SELECT 
+    rep.userId as 대표ID,
+    COUNT(DISTINCT gs.gameDate) as 총게임일수,
+    ROUND(SUM(gs.netBet)) as 그룹_총유효배팅,
+    ROUND(SUM(gs.winLoss)) as 총손익,
+    MIN(gs.gameDate) as 첫게임일,
+    MAX(gs.gameDate) as 마지막게임일,
+    DATEDIFF(CURDATE(), MAX(gs.gameDate)) as 휴면일수,
+    CASE 
+        WHEN ROUND(SUM(gs.netBet)) >= 1000000 AND COUNT(DISTINCT gs.gameDate) >= 50 THEN 'Premium'
+        WHEN ROUND(SUM(gs.netBet)) >= 500000 AND COUNT(DISTINCT gs.gameDate) >= 30 THEN 'High'
+        WHEN ROUND(SUM(gs.netBet)) >= 100000 AND COUNT(DISTINCT gs.gameDate) >= 15 THEN 'Medium'
+        ELSE 'Basic'
+    END as 등급
+FROM player_guilds pg
+-- 대표ID 계산
+JOIN (
+    SELECT pg1.guild, p1.userId, p1.id
+    FROM player_guilds pg1
+    JOIN players p1 ON pg1.player = p1.id
+    JOIN game_scores gs1 ON p1.userId = gs1.userId
+    WHERE (pg1.guild, gs1.gameDate) IN (
+        SELECT pg2.guild, MAX(gs2.gameDate)
+        FROM player_guilds pg2
+        JOIN players p2 ON pg2.player = p2.id
+        JOIN game_scores gs2 ON p2.userId = gs2.userId
+        GROUP BY pg2.guild
+    )
+) rep ON pg.guild = rep.guild
+JOIN players p ON pg.player = p.id
+JOIN game_scores gs ON p.userId = gs.userId
+WHERE DATEDIFF(CURDATE(), gs.gameDate) > 30  -- 휴면 기준
+GROUP BY pg.guild, rep.userId
+HAVING 총게임일수 >= 7 AND 그룹_총유효배팅 >= 50000
+ORDER BY 그룹_총유효배팅 DESC;
+```
+
+### 3. 기존 단일 계정 분석 (참고용)
 
 ### 2. 마량 시스템 분석
 ```sql
@@ -199,12 +304,59 @@ HAVING 총게임일수 >= 7 AND 총유효배팅 >= 50000
 ORDER BY 총유효배팅 DESC;
 ```
 
+### 5. 연락처 정보 통합 분석 - 2025-05-31 추가
+```sql
+-- 고가치 휴면 사용자 + 연락처 정보 (마케팅용)
+WITH contact_info AS (
+    SELECT 
+        p.userId,
+        MAX(CASE WHEN pc.contactType = 'phone' THEN pc.contact END) as phone_number,
+        MAX(CASE WHEN pc.contactType = 'wechat' THEN pc.contact END) as wechat_id,
+        p.phoneName as phone_memo,
+        p.note as additional_note
+    FROM players p
+    LEFT JOIN player_contacts pc ON p.id = pc.player
+    GROUP BY p.userId, p.phoneName, p.note
+)
+SELECT 
+    p.userId,
+    ROUND(SUM(gs.netBet)) as 총유효배팅,
+    DATEDIFF(CURDATE(), MAX(gs.gameDate)) as 휴면일수,
+    ci.phone_number,
+    ci.wechat_id,
+    ci.phone_memo,
+    ci.additional_note,
+    CASE 
+        WHEN ci.phone_number IS NOT NULL AND ci.wechat_id IS NOT NULL THEN 'Both'
+        WHEN ci.phone_number IS NOT NULL THEN 'Phone'
+        WHEN ci.wechat_id IS NOT NULL THEN 'WeChat'
+        ELSE 'None'
+    END as contact_availability
+FROM players p
+JOIN game_scores gs ON p.userId = gs.userId
+LEFT JOIN contact_info ci ON p.userId = ci.userId
+GROUP BY p.userId, ci.phone_number, ci.wechat_id, ci.phone_memo, ci.additional_note
+HAVING 총유효배팅 >= 100000 AND 휴면일수 >= 30
+ORDER BY 총유효배팅 DESC;
+```
+
 ## 🎯 비즈니스 분석 지침
 
 ### 사용자 활동 분류 기준
 - **활성 사용자**: 최근 30일 이내 게임 기록
 - **휴면 사용자**: 30일 이상 게임하지 않은 사용자
 - **고가치 사용자**: 최소 7일 게임 + 50,000원 이상 NetBet
+
+### 연락처 기반 마케팅 우선순위 - 2025-05-31 추가
+- **Both (전화+위챗)**: 🥇 1순위 - 다중 채널 마케팅, 최고 도달률
+- **Phone**: 🥈 2순위 - 전화 마케팅 집중, 직접 상담 가능
+- **WeChat**: 🥉 3순위 - 위챗 메시징, 비용 효율적
+- **None**: ⚠️ 우선 연락처 수집 필요, 게임 내 알림 활용
+
+### 연락처 활용 전략
+- **전화 메모 (phoneName)**: 통화 선호 시간, 응대 방식 참조
+- **추가 메모 (note)**: 고객 특성, 주의사항, VIP 등급 확인
+- **등급별 접근**: Premium(개인 전화), High(전화+위챗), Medium/Basic(위챗 중심)
 
 ### 이벤트 효과 측정
 - **참여율**: Ready → Applied 전환율
@@ -224,5 +376,7 @@ ORDER BY 총유효배팅 DESC;
 - 모든 쿼리는 다중 계정 처리를 고려하여 작성하세요.
 - 개인정보 보호 규칙을 항상 준수하세요.
 - Enum 정의는 C# 코드 기반으로 검증되었습니다.
+- **연락처 시스템**: 2025-05-31 추가된 전화번호/위챗 기반 마케팅 시스템
 
-*최종 업데이트: 2025-05-26*
+*최종 업데이트: 2025-05-31*
+*연락처 시스템 추가: 2025-05-31*

@@ -11,7 +11,12 @@
     "deploy:hosting": "firebase deploy --only hosting",
     "build": "npm run build --prefix functions",
     "logs": "firebase functions:log",
-    "test": "npm test --prefix functions"
+    "test": "npm test --prefix functions",
+    "port:check": "node scripts/port-manager.js check",
+    "port:resolve": "node scripts/port-manager.js resolve",
+    "port:scan": "node scripts/port-manager.js scan",
+    "port:status": "node scripts/port-manager.js status",
+    "prestart": "npm run port:check"
   },
   "keywords": [
     "casino",

@@ -262,8 +262,11 @@
 
         // API 호출 헬퍼
         async function apiCall(endpoint, requireAuth = true) {
-            // Firebase Functions URL 사용
-            const functionsUrl = 'https://us-central1-db888-67827.cloudfunctions.net';
+            // 로컬 개발환경과 프로덕션 환경 구분
+            const isLocal = location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+            const functionsUrl = isLocal 
+                ? 'http://127.0.0.1:5001/db888-67827/us-central1'
+                : 'https://us-central1-db888-67827.cloudfunctions.net';
             const url = `${functionsUrl}/${endpoint}`;
             
             const headers = {

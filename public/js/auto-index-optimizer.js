@@ -1,6 +1,6 @@
         // API 기본 설정
         const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 
-            'http://127.0.0.1:9002/db888-67827/us-central1' : 
+            'http://127.0.0.1:50888/db888-67827/us-central1' : 
             'https://us-central1-db888-67827.cloudfunctions.net';
 
         let selectedActions = new Set();

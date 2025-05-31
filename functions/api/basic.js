@@ -158,3 +158,250 @@ exports.getSystemHealth = functions.https.onRequest(async (req, res) => {
     }
   });
 });
+
+/**
+ * TEST ONLY: Database Schema Check
+ * Shows table structure to understand available fields
+ */
+exports.getTableSchema = functions.https.onRequest(async (req, res) => {
+  cors(req, res, async () => {
+    try {
+      const tableName = req.query.table || 'players';
+      
+      console.log(`🔍 Checking schema for table: ${tableName}`);
+      
+      const startTime = Date.now();
+      const schemaQuery = `DESCRIBE ${tableName}`;
+      const schemaResult = await executeQuery(schemaQuery);
+      const responseTime = Date.now() - startTime;
+      
+      res.json({
+        status: "success",
+        table: tableName,
+        schema: schemaResult,
+        responseTime: `${responseTime}ms`,
+        timestamp: new Date().toISOString(),
+        note: "⚠️ TEST ONLY - Development use only"
+      });
+      
+    } catch (error) {
+      console.error('Schema check error:', error);
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+});
+
+/**
+ * TEST ONLY: User Contact Information 
+ * Shows userId with contact info for testing purposes
+ * ⚠️ THIS IS FOR LOCAL TESTING ONLY - DO NOT USE IN PRODUCTION
+ */
+exports.getUserContactInfo = functions.https.onRequest(async (req, res) => {
+  cors(req, res, async () => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+      const offset = parseInt(req.query.offset) || 0;
+      
+      console.log('⚠️ TEST MODE: Fetching user contact information');
+      
+      const startTime = Date.now();
+      
+      // Query to get actual contact information
+      const contactQuery = `
+        SELECT 
+          userId,
+          name,
+          phoneName,
+          note,
+          site,
+          createdAt,
+          lastPlayDate,
+          CASE 
+            WHEN phoneName IS NOT NULL AND phoneName != '' THEN phoneName
+            ELSE 'No Phone'
+          END as phoneInfo,
+          CASE 
+            WHEN note IS NOT NULL AND note != '' THEN note
+            ELSE 'No WeChat/Note'
+          END as wechatOrNote
+        FROM players 
+        WHERE userId IS NOT NULL 
+        ORDER BY id DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      
+      const result = await executeQuery(contactQuery);
+      const responseTime = Date.now() - startTime;
+      
+      res.json({
+        status: "success",
+        data: result,
+        pagination: {
+          limit: limit,
+          offset: offset,
+          count: result.length
+        },
+        responseTime: `${responseTime}ms`,
+        timestamp: new Date().toISOString(),
+        warning: "⚠️ TEST ONLY - Contains actual user contact information",
+        note: "Fields: userId, name, phoneName, note(possible WeChat), site, dates",
+        security: "🔒 Remove this API before production deployment"
+      });
+      
+    } catch (error) {
+      console.error('User contact info error:', error);
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+});
+
+/**
+ * TEST ONLY: Check Other Tables for Contact Info
+ * Explores other tables that might contain contact information
+ */
+exports.exploreContactTables = functions.https.onRequest(async (req, res) => {
+  cors(req, res, async () => {
+    try {
+      console.log('🔍 Exploring other tables for contact information');
+      
+      const startTime = Date.now();
+      
+      // First, list all tables
+      const tablesQuery = "SHOW TABLES";
+      const tables = await executeQuery(tablesQuery);
+      
+      // Look for tables that might contain contact info
+      const contactTables = [];
+      for (const table of tables) {
+        const tableName = Object.values(table)[0];
+        if (tableName.toLowerCase().includes('contact') || 
+            tableName.toLowerCase().includes('phone') || 
+            tableName.toLowerCase().includes('wechat') ||
+            tableName.toLowerCase().includes('user') ||
+            tableName.toLowerCase().includes('profile')) {
+          contactTables.push(tableName);
+        }
+      }
+      
+      const responseTime = Date.now() - startTime;
+      
+      res.json({
+        status: "success",
+        allTables: tables.map(t => Object.values(t)[0]),
+        potentialContactTables: contactTables,
+        totalTables: tables.length,
+        responseTime: `${responseTime}ms`,
+        timestamp: new Date().toISOString(),
+        note: "⚠️ TEST ONLY - Exploring database structure for contact info",
+        suggestion: "Use getTableSchema?table=[tableName] to check each table structure"
+      });
+      
+    } catch (error) {
+      console.error('Table exploration error:', error);
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+});
+
+/**
+ * TEST ONLY: Get Full Contact Information
+ * Combines players table with dedicated contact tables for complete contact info
+ * ⚠️ THIS IS FOR LOCAL TESTING ONLY - CONTAINS SENSITIVE DATA
+ */
+exports.getFullContactInfo = functions.https.onRequest(async (req, res) => {
+  cors(req, res, async () => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit) || 10, 100);
+      const offset = parseInt(req.query.offset) || 0;
+      const contactType = req.query.type; // phone, wechat, etc.
+      
+      console.log('⚠️ SENSITIVE: Fetching full contact information');
+      
+      const startTime = Date.now();
+      
+      // Query to combine players with their contact information
+      let contactQuery = `
+        SELECT 
+          p.userId,
+          p.name,
+          p.phoneName as playerPhoneName,
+          p.note as playerNote,
+          p.site,
+          p.lastPlayDate,
+          pc.contactType,
+          pc.contact as contactValue,
+          CASE 
+            WHEN pc.contactType = 'phone' THEN '📞'
+            WHEN pc.contactType = 'wechat' THEN '💬'
+            WHEN pc.contactType = 'email' THEN '📧'
+            ELSE '📱'
+          END as contactIcon
+        FROM players p
+        LEFT JOIN player_contacts pc ON p.id = pc.player
+        WHERE p.userId IS NOT NULL
+      `;
+      
+      // Filter by contact type if specified
+      if (contactType) {
+        contactQuery += ` AND pc.contactType = '${contactType}'`;
+      }
+      
+      contactQuery += `
+        ORDER BY p.id DESC, pc.contactType ASC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+      
+      const result = await executeQuery(contactQuery);
+      
+      // Also get contact type summary
+      const summaryQuery = `
+        SELECT 
+          contactType,
+          COUNT(*) as count
+        FROM player_contacts 
+        GROUP BY contactType
+        ORDER BY count DESC
+      `;
+      
+      const summary = await executeQuery(summaryQuery);
+      const responseTime = Date.now() - startTime;
+      
+      res.json({
+        status: "success",
+        data: result,
+        contactTypeSummary: summary,
+        pagination: {
+          limit: limit,
+          offset: offset,
+          count: result.length
+        },
+        responseTime: `${responseTime}ms`,
+        timestamp: new Date().toISOString(),
+        warning: "🔒 SENSITIVE DATA - Contains actual contact information",
+        note: "Combined data from players + player_contacts tables",
+        availableTypes: summary.map(s => s.contactType),
+        security: "⚠️ REMOVE THIS API BEFORE PRODUCTION DEPLOYMENT"
+      });
+      
+    } catch (error) {
+      console.error('Full contact info error:', error);
+      res.status(500).json({
+        status: "error",
+        message: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+});
